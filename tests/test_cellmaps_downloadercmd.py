@@ -22,16 +22,21 @@ class TestCellmaps_downloader(unittest.TestCase):
 
     def test_parse_arguments(self):
         """Tests parse arguments"""
-        res = cellmaps_downloadercmd._parse_arguments('hi', [])
+
+        res = cellmaps_downloadercmd._parse_arguments('hi',
+                                                      ['foo'])
 
         self.assertEqual(res.verbose, 0)
         self.assertEqual(res.exitcode, 0)
         self.assertEqual(res.logconf, None)
 
-        someargs = ['-vv', '--logconf', 'hi', '--exitcode', '3']
-        res = cellmaps_downloadercmd._parse_arguments('hi', someargs)
+        someargs = ['foo', '-vv', '--logconf',
+                    'hi', '--exitcode', '3']
+        res = cellmaps_downloadercmd._parse_arguments('hi',
+                                                      someargs)
 
         self.assertEqual(res.verbose, 2)
+        self.assertEqual(res.outdir, 'foo')
         self.assertEqual(res.logconf, 'hi')
         self.assertEqual(res.exitcode, 3)
 
@@ -44,7 +49,8 @@ class TestCellmaps_downloader(unittest.TestCase):
             pass
 
         # args.logconf is None
-        res = cellmaps_downloadercmd._parse_arguments('hi', [])
+        res = cellmaps_downloadercmd._parse_arguments('hi',
+                                                      ['foo'])
         cellmaps_downloadercmd._setup_logging(res)
 
         # args.logconf set to a file
@@ -75,8 +81,9 @@ args=(sys.stderr,)
 [formatter_formatter]
 format=%(asctime)s %(name)-12s %(levelname)-8s %(message)s""")
 
-            res = cellmaps_downloadercmd._parse_arguments('hi', ['--logconf',
-                                                                       logfile])
+            res = cellmaps_downloadercmd._parse_arguments('hi', [temp_dir,
+                                                                 '--logconf',
+                                                                 logfile])
             cellmaps_downloadercmd._setup_logging(res)
 
         finally:
@@ -88,7 +95,7 @@ format=%(asctime)s %(name)-12s %(levelname)-8s %(message)s""")
         # try where loading config is successful
         try:
             temp_dir = tempfile.mkdtemp()
-            res = cellmaps_downloadercmd.main(['myprog.py'])
-            self.assertEqual(res, 0)
+            res = cellmaps_downloadercmd.main(['myprog.py', temp_dir])
+            self.assertEqual(res, 2)
         finally:
             shutil.rmtree(temp_dir)

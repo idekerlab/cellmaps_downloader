@@ -1,11 +1,13 @@
 #! /usr/bin/env python
 
+import os
 import argparse
 import sys
 import logging
 import logging.config
 
 import cellmaps_downloader
+from cellmaps_downloader.runner import MultiProcessImageDownloader
 from cellmaps_downloader.runner import CellmapsdownloaderRunner
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,22 @@ def _parse_arguments(desc, args):
     """
     parser = argparse.ArgumentParser(description=desc,
                                      formatter_class=Formatter)
+    parser.add_argument('outdir',
+                        help='Directory to write results to')
+    parser.add_argument('--tsv',
+                        help='TSV file with list of IF images to download '
+                             'in format of gene_names\tfile_link\tfile_name\n'
+                             'GOLGA5\thttps://images.proteinatlas.org/992/1_A1_1_\t1_A1_1_')
+    parser.add_argument('--poolsize', type=int,
+                        default=4,
+                        help='If using multiprocessing image downloader, '
+                             'this sets number of current downloads to run '
+                             'Going above the default overloads the server')
+    parser.add_argument('--imgsuffix', default='.jpg',
+                        help='Suffix for images to download')
+    parser.add_argument('--skip_existing', action='store_true',
+                        help='If set, skips download if image already exists and '
+                             'has size greater then 0 bytes')
     parser.add_argument('--logconf', default=None,
                         help='Path to python logging configuration file in '
                              'this format: https://docs.python.org/3/library/'
@@ -106,7 +124,12 @@ def main(args):
 
     try:
         _setup_logging(theargs)
-        return CellmapsdownloaderRunner(theargs.exitcode).run()
+        dloader = MultiProcessImageDownloader(poolsize=theargs.poolsize,
+                                              skip_existing=theargs.skip_existing)
+        return CellmapsdownloaderRunner(outdir=theargs.outdir,
+                                        tsvfile=theargs.tsv,
+                                        imagedownloader=dloader,
+                                        imgsuffix=theargs.imgsuffix).run()
     except Exception as e:
         logger.exception('Caught exception: ' + str(e))
         return 2

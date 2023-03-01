@@ -8,8 +8,9 @@ import unittest
 import tempfile
 import shutil
 import requests_mock
-
+from cellmaps_downloader.exceptions import CellMapsDownloaderError
 from cellmaps_downloader.runner import CellmapsdownloaderRunner
+from cellmaps_downloader import runner
 
 
 class TestCellmapsdownloaderrunner(unittest.TestCase):
@@ -23,29 +24,69 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
 
     def test_constructor(self):
         """Tests constructor"""
-        myobj = CellmapsdownloaderRunner(0)
-
+        myobj = CellmapsdownloaderRunner()
         self.assertIsNotNone(myobj)
 
     def test_run(self):
         """ Tests run()"""
-        myobj = CellmapsdownloaderRunner(4)
-        self.assertEqual(4, myobj.run())
+        myobj = CellmapsdownloaderRunner()
+        try:
+            myobj.run()
+            self.fail('Expected CellMapsDownloaderError')
+        except CellMapsDownloaderError as c:
+            self.assertTrue('Output directory is None' in str(c))
 
     def test_download_file(self):
         temp_dir = tempfile.mkdtemp()
 
         try:
             mockurl = 'http://fakey.fake.com/ha.txt'
-            runner = CellmapsdownloaderRunner(0)
+
             with requests_mock.mock() as m:
                 m.get(mockurl, status_code=200,
                       text='somedata')
                 a_dest_file = os.path.join(temp_dir, 'downloadedfile.txt')
-                runner._download_file(mockurl, a_dest_file)
+                runner.download_file((mockurl, a_dest_file))
             self.assertTrue(os.path.isfile(a_dest_file))
             with open(a_dest_file, 'r') as f:
                 data = f.read()
                 self.assertEqual('somedata', data)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_create_output_directory(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            runner = CellmapsdownloaderRunner(outdir=temp_dir)
+            runner._create_output_directory()
+            for c in CellmapsdownloaderRunner.COLORS:
+                self.assertTrue(os.path.isdir(os.path.join(temp_dir, c)))
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_get_download_tuples_from_tsv(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            link = 'https://x.y.z/359/'
+            f_name_one = '1_A1_1_'
+            f_name_two = '1_A1_2_'
+            tsvfile = os.path.join(temp_dir, 'foo.tsv')
+            with open(tsvfile, 'w') as f:
+                f.write('gene_names\tfile_link\tfile_name\n')
+                f.write('FOO1\t' + link + f_name_one + '\t' +
+                        f_name_one + '\n')
+                f.write('FOO2\t' + link + f_name_two + '\t' +
+                        f_name_two + '\n')
+
+            runner = CellmapsdownloaderRunner(outdir=temp_dir, tsvfile=tsvfile)
+            dtuples = runner._get_download_tuples_from_tsv()
+            self.assertTrue(8, len(dtuples))
+            for c in CellmapsdownloaderRunner.COLORS:
+                for fname in [f_name_one, f_name_two]:
+                    self.assertTrue((link + fname + c + '.jpg',
+                                     os.path.join(temp_dir, c,
+                                                  fname +
+                                                  c + '.jpg')) in dtuples)
+
         finally:
             shutil.rmtree(temp_dir)
