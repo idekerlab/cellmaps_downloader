@@ -18,7 +18,8 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = ['requests']
+requirements = ['requests',
+                'tqdm']
 
 setup_requirements = [ ]
 
@@ -47,7 +48,7 @@ setup(
     name='cellmaps_downloader',
     packages=find_packages(include=['cellmaps_downloader']),
     package_dir={'cellmaps_downloader': 'cellmaps_downloader'},
-    scripts=[ 'cellmaps_downloader/cellmaps_downloadercmd.py'],
+    scripts=['cellmaps_downloader/cellmaps_downloadercmd.py'],
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,
