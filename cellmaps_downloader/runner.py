@@ -3,6 +3,7 @@
 import os
 from multiprocessing import Pool
 import csv
+import shutil
 import logging
 import logging.config
 import requests
@@ -100,15 +101,19 @@ class MultiProcessImageDownloader(ImageDownloader):
             dfunc = download_file_skip_existing
 
         failed_downloads = []
+        logger.debug('Poolsize for image downloader set to: ' +
+                     str(self._poolsize))
         with Pool(processes=self._poolsize) as pool:
-            t = tqdm(total=len(download_list), desc='Download',
+            num_to_download = len(download_list)
+            logger.info(str(num_to_download) + ' images to download')
+            t = tqdm(total=num_to_download, desc='Download',
                      unit='images')
             for i in pool.imap_unordered(dfunc,
                                          download_list):
                 t.update()
                 if i is not None:
-                    if logger.isEnabledFor(logging.INFO):
-                        logger.info('Failed download: ' + str(i))
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('Failed download: ' + str(i))
                     failed_downloads.append(i)
         return failed_downloads
 
@@ -124,6 +129,8 @@ class CellmapsdownloaderRunner(object):
     YELLOW = 'yellow'
 
     COLORS = [RED, BLUE, GREEN, YELLOW]
+
+    TSVFILE = 'immunofluorescent.tsv'
 
     def __init__(self, outdir=None, tsvfile=None,
                  imgsuffix='.jpg',
@@ -142,7 +149,6 @@ class CellmapsdownloaderRunner(object):
         self._tsvfile = tsvfile
         self._imagedownloader = imagedownloader
         self._imgsuffix = imgsuffix
-        logger.debug('In constructor')
 
     def _setup_filelogger(self):
         """
@@ -200,6 +206,26 @@ class CellmapsdownloaderRunner(object):
                 logger.debug('Creating directory: ' + cdir)
                 os.makedirs(cdir,
                             mode=0o755)
+            else:
+                logger.debug(cdir + ' already exists')
+
+    def _get_input_tsvfile(self):
+        """
+
+        :return:
+        """
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.TSVFILE)
+
+    def _copy_over_tsvfile(self):
+        """
+        Copies tsv file into output directory for record keeping purposes
+
+        :return:
+        """
+        logger.debug('Copying ' + self._tsvfile + ' to ' +
+                     self._get_input_tsvfile())
+        shutil.copy(self._tsvfile, self._get_input_tsvfile())
 
     def _get_color_download_map(self):
         """
@@ -220,7 +246,7 @@ class CellmapsdownloaderRunner(object):
 
         color_d_map = self._get_color_download_map()
 
-        with open(self._tsvfile, 'r') as f:
+        with open(self._get_input_tsvfile(), 'r') as f:
             reader = csv.reader(f, delimiter='\t')
             is_first_row = True
             for row in reader:
@@ -242,6 +268,8 @@ class CellmapsdownloaderRunner(object):
         """
         self._create_output_directory()
         self._setup_filelogger()
+        logger.debug('In run()')
+        self._copy_over_tsvfile()
 
         # todo, copy over tsv file
 
@@ -260,11 +288,12 @@ class CellmapsdownloaderRunner(object):
             raise CellMapsDownloaderError('Image downloader is None')
 
         failed_downloads = self._imagedownloader.download_images(downloadtuples)
-        for x in failed_downloads:
-            logger.error('Download failed: ' + str(x))
-        if len(failed_downloads) > 0:
-            # try one more time with files that failed
 
+        if len(failed_downloads) > 0:
+            logger.error(str(len(failed_downloads)) +
+                         ' images failed to download. Retrying')
+            # try one more time with files that failed
+            raise CellMapsDownloaderError('Not implemented yet!!!')
             return 1
         return 0
         # todo need a JSON file for completion
