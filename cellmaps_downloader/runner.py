@@ -4,6 +4,7 @@ import os
 from multiprocessing import Pool
 import csv
 import logging
+import logging.config
 import requests
 from tqdm import tqdm
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
@@ -13,9 +14,15 @@ logger = logging.getLogger(__name__)
 
 def download_file_skip_existing(downloadtuple):
     """
+    Downloads file in **downloadtuple** unless the file already exists
+    with a size greater then 0 bytes, in which case function
+    just returns
 
-    :param downloadtuple:
-    :return:
+    :param downloadtuple: (download link, dest file path)
+    :type downloadtuple: tuple
+    :return: None upon success otherwise:
+             (requests status code, text from request, downloadtuple)
+    :rtype: tuple
     """
     if os.path.isfile(downloadtuple[1]) and os.path.getsize(downloadtuple[1]) > 0:
         return None
@@ -30,7 +37,9 @@ def download_file(downloadtuple):
     :param downloadtuple: (download link, dest file path)
     :type downloadtuple: tuple
     :raises Exception: from requests library if there is an error or non 200 status
-    :return: None
+    :return: None upon success otherwise:
+             (requests status code, text from request, downloadtuple)
+    :rtype: tuple
     """
     logger.debug('Downloading ' + downloadtuple[0] + ' to ' + downloadtuple[1])
     with requests.get(downloadtuple[0], stream=True) as r:
@@ -135,6 +144,47 @@ class CellmapsdownloaderRunner(object):
         self._imgsuffix = imgsuffix
         logger.debug('In constructor')
 
+    def _setup_filelogger(self):
+        """
+        Sets up a logger to write all debug logs
+        to output directory/output.log
+        and all error level log messages and higher
+        to output directory/error.log
+
+        :return: None
+        """
+        logging.config.dictConfig({'version': 1,
+                                   'disable_existing_loggers': False,
+                                   'loggers': {
+                                     '': {
+                                         'level': 'NOTSET',
+                                         'handlers': ['cellmapsdownloader_file_handler',
+                                                      'cellmapsdownloader_error_file_handler']
+                                     }
+                                   },
+                                   'handlers': {
+                                       'cellmapsdownloader_file_handler': {
+                                           'level': 'DEBUG',
+                                           'class': 'logging.FileHandler',
+                                           'formatter': 'cellmaps_formatter',
+                                           'filename': os.path.join(self._outdir, 'output.log'),
+                                           'mode': 'a'
+                                       },
+                                       'cellmapsdownloader_error_file_handler': {
+                                           'level': 'ERROR',
+                                           'class': 'logging.FileHandler',
+                                           'formatter': 'cellmaps_formatter',
+                                           'filename': os.path.join(self._outdir, 'error.log'),
+                                           'mode': 'a'
+                                       }
+                                   },
+                                   'formatters': {
+                                       'cellmaps_formatter': {
+                                           'format': '%(asctime)-15s %(levelname)s %(relativeCreated)dms %(filename)s::%(funcName)s():%(lineno)d %(message)s'
+                                       }
+                                   }
+                                   })
+
     def _create_output_directory(self):
         """
 
@@ -190,8 +240,9 @@ class CellmapsdownloaderRunner(object):
 
         :return:
         """
-        logger.debug('In run method')
         self._create_output_directory()
+        self._setup_filelogger()
+
         # todo, copy over tsv file
 
         # todo need a JSON file for start
@@ -212,6 +263,8 @@ class CellmapsdownloaderRunner(object):
         for x in failed_downloads:
             logger.error('Download failed: ' + str(x))
         if len(failed_downloads) > 0:
+            # try one more time with files that failed
+
             return 1
         return 0
         # todo need a JSON file for completion
