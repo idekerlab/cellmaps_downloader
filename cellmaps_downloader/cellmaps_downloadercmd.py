@@ -49,8 +49,8 @@ def _parse_arguments(desc, args):
     parser.add_argument('--poolsize', type=int,
                         default=4,
                         help='If using multiprocessing image downloader, '
-                             'this sets number of current downloads to run '
-                             'Going above the default overloads the server')
+                             'this sets number of current downloads to run. '
+                             'Note: Going above the default overloads the server')
     parser.add_argument('--imgsuffix', default='.jpg',
                         help='Suffix for images to download')
     parser.add_argument('--skip_existing', action='store_true',
@@ -94,6 +94,7 @@ def _setup_logging(args):
         logging.basicConfig(format=LOG_FORMAT,
                             level=level)
         logger.setLevel(level)
+        logger.propagate = True
         return
 
     # logconf was set use that file
@@ -115,7 +116,26 @@ def main(args):
     desc = """
     Version {version}
 
-    Invokes run() method on CellmapsdownloaderRunner
+    Downloads immunofluorescent labeled images from the Human Protein Atlas
+    (https://www.proteinatlas.org/)
+    
+    To use pass in a TSV file containing links to the images to download
+    from HPA
+    
+    Format of TSV file:
+    
+    gene_names  file_link   file_name
+    XXXX    https://images.proteinatlas.org/###/1_A1_1_ 1_A1_1_
+    
+    Where XXXX is gene name and ### is a id number and 1_A1_1_ is an
+    example file name
+    
+    The downloaded images are stored under the output directory
+    specified on the command line in color specific directories
+    (red, blue, green, yellow) with name format of: 
+    <NAME>_color.jpg 
+    
+    Example: 1_A1_1_blue.jpg
 
     """.format(version=cellmaps_downloader.__version__)
     theargs = _parse_arguments(desc, args[1:])
