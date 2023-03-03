@@ -144,11 +144,3 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
 
         finally:
             shutil.rmtree(temp_dir)
-
-    def test_image_downloader(self):
-        dloader = ImageDownloader()
-        try:
-            dloader.download_images()
-            self.fail('Expected Exception')
-        except CellMapsDownloaderError as ce:
-            self.assertEqual('Subclasses should implement this', str(ce))
