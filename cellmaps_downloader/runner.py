@@ -272,10 +272,15 @@ class CellmapsdownloaderRunner(object):
 
         :return:
         """
+        if self._tsvfile is None:
+            tsvfile = 'Not set'
+        else:
+            tsvfile = os.path.abspath(self._tsvfile)
+
         task = {'start_time': self._start_time,
                 'version': str(cellmaps_downloader.__version__),
                 'pid': str(os.getpid()),
-                'tsvfile': os.path.abspath(self._tsvfile),
+                'tsvfile': tsvfile,
                 'outdir': self._outdir,
                 'image_downloader': str(self._imagedownloader),
                 'image_suffix': self._imgsuffix,
@@ -298,6 +303,11 @@ class CellmapsdownloaderRunner(object):
 
         :return:
         """
+        if self._outdir is None or not os.path.isdir(self._outdir):
+            logger.error('Output directory is not set or not a '
+                         'directory, cannot write'
+                         'task finish json file')
+            return
         if self._end_time == -1:
             self._end_time = int(time.time())
         task = {'end_time': self._end_time,
@@ -309,44 +319,41 @@ class CellmapsdownloaderRunner(object):
                                '_finish.json'), 'w') as f:
             json.dump(task, f, indent=2)
 
-    def run(self):
+    def _download_images(self):
         """
-        Runs cellmaps_downloader
-
 
         :return:
         """
+        if self._imagedownloader is None:
+            raise CellMapsDownloaderError('Image downloader is None')
+
+        downloadtuples = self._get_download_tuples_from_tsv()
+
+        failed_downloads = self._imagedownloader.download_images(downloadtuples)
+
+        if len(failed_downloads) > 0:
+            logger.error(str(len(failed_downloads)) +
+                         ' images failed to download. Retrying')
+            # try one more time with files that failed
+            raise CellMapsDownloaderError('Not implemented yet!!!')
+        return 0
+
+    def run(self):
+        """
+        Downloads images to output directory specified in constructor
+        using tsvfile for list of images to download
+
+        :raises CellMapsDownloaderError: If there is an error
+        :return: 0 upon success, otherwise failure
+        """
         try:
             exitcode = 99
+
             self._create_output_directory()
             self._setup_filelogger()
             self._write_task_start_json()
-            logger.debug('In run()')
             self._copy_over_tsvfile()
-
-            # todo, copy over tsv file?
-
-            downloadtuples = self._get_download_tuples_from_tsv()
-
-            if self._imagedownloader is None:
-                raise CellMapsDownloaderError('Image downloader is None')
-
-            failed_downloads = self._imagedownloader.download_images(downloadtuples)
-
-            if len(failed_downloads) > 0:
-                logger.error(str(len(failed_downloads)) +
-                             ' images failed to download. Retrying')
-                # try one more time with files that failed
-                raise CellMapsDownloaderError('Not implemented yet!!!')
-                exitcode = 1
-                return exitcode
-            exitcode = 0
-            return exitcode
-            # todo need a JSON file for completion
-            # what should we put in this file?
-            # end time
-            # duration
-            # success status
-            # summary of failures?
+            return self._download_images()
         finally:
+            # write a task finish file no matter what
             self._write_task_finish_json(status=exitcode)
