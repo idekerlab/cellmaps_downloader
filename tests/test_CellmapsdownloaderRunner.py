@@ -8,8 +8,11 @@ import unittest
 import tempfile
 import shutil
 import requests_mock
+import json
+import cellmaps_downloader
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
 from cellmaps_downloader.runner import CellmapsdownloaderRunner
+from cellmaps_downloader.runner import ImageDownloader
 from cellmaps_downloader import runner
 
 
@@ -64,6 +67,56 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir)
 
+    def test_write_task_start_json_tsv_not_set(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            runner = CellmapsdownloaderRunner(outdir=temp_dir)
+            runner._create_output_directory()
+            runner._write_task_start_json()
+            start_file = None
+            for entry in os.listdir(temp_dir):
+                if not entry.endswith('_start.json'):
+                    continue
+                start_file = os.path.join(temp_dir, entry)
+            self.assertIsNotNone(start_file)
+
+            with open(start_file, 'r') as f:
+                data = json.load(f)
+
+            self.assertEqual(cellmaps_downloader.__version__,
+                             data['version'])
+            self.assertEqual('Not set', data['tsvfile'])
+            self.assertTrue(data['start_time'] > 0)
+            self.assertEqual(temp_dir, data['outdir'])
+
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_write_task_start_json(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            runner = CellmapsdownloaderRunner(outdir=temp_dir, tsvfile='/fake/my.tsv')
+            runner._create_output_directory()
+            runner._write_task_start_json()
+            start_file = None
+            for entry in os.listdir(temp_dir):
+                if not entry.endswith('_start.json'):
+                    continue
+                start_file = os.path.join(temp_dir, entry)
+            self.assertIsNotNone(start_file)
+
+            with open(start_file, 'r') as f:
+                data = json.load(f)
+
+            self.assertEqual(cellmaps_downloader.__version__,
+                             data['version'])
+            self.assertEqual(os.path.abspath('/fake/my.tsv'),
+                             data['tsvfile'])
+            self.assertTrue(data['start_time'] > 0)
+            self.assertEqual(temp_dir, data['outdir'])
+        finally:
+            shutil.rmtree(temp_dir)
+
     def test_get_download_tuples_from_tsv(self):
         temp_dir = tempfile.mkdtemp()
         try:
@@ -79,6 +132,7 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
                         f_name_two + '\n')
 
             runner = CellmapsdownloaderRunner(outdir=temp_dir, tsvfile=tsvfile)
+            runner._copy_over_tsvfile()
             dtuples = runner._get_download_tuples_from_tsv()
             self.assertTrue(8, len(dtuples))
             for c in CellmapsdownloaderRunner.COLORS:
@@ -90,3 +144,11 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
 
         finally:
             shutil.rmtree(temp_dir)
+
+    def test_image_downloader(self):
+        dloader = ImageDownloader()
+        try:
+            dloader.download_images()
+            self.fail('Expected Exception')
+        except CellMapsDownloaderError as ce:
+            self.assertEqual('Subclasses should implement this', str(ce))
