@@ -7,7 +7,11 @@ import shutil
 import logging
 import logging.config
 import requests
+import json
+import time
+import platform
 from tqdm import tqdm
+import cellmaps_downloader
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
 
 logger = logging.getLogger(__name__)
@@ -149,6 +153,8 @@ class CellmapsdownloaderRunner(object):
         self._tsvfile = tsvfile
         self._imagedownloader = imagedownloader
         self._imgsuffix = imgsuffix
+        self._start_time = int(time.time())
+        self._end_time = -1
 
     def _setup_filelogger(self):
         """
@@ -259,6 +265,50 @@ class CellmapsdownloaderRunner(object):
                                                 c + self._imgsuffix)))
         return dtuples
 
+    def _write_task_start_json(self):
+        """
+        Writes task_start.json file with information about
+        what is to be run
+
+        :return:
+        """
+        task = {'start_time': self._start_time,
+                'version': str(cellmaps_downloader.__version__),
+                'pid': str(os.getpid()),
+                'tsvfile': os.path.abspath(self._tsvfile),
+                'outdir': self._outdir,
+                'image_downloader': str(self._imagedownloader),
+                'image_suffix': self._imgsuffix,
+                'login': str(os.getlogin()),
+                'cwd': str(os.getcwd()),
+                'platform': str(platform.platform()),
+                'python': str(platform.python_version()),
+                'system': str(platform.system()),
+                'uname': str(platform.uname())
+                }
+        with open(os.path.join(self._outdir,
+                               'task_' + str(self._start_time) +
+                               '_start.json'), 'w') as f:
+            json.dump(task, f, indent=2)
+
+    def _write_task_finish_json(self, status=None):
+        """
+        Writes task_finish.json file with information about
+        what is to be run
+
+        :return:
+        """
+        if self._end_time == -1:
+            self._end_time = int(time.time())
+        task = {'end_time': self._end_time,
+                'elapsed_time': int(self._end_time - self._start_time),
+                'status': str(status)
+                }
+        with open(os.path.join(self._outdir,
+                               'task_' + str(self._start_time) +
+                               '_finish.json'), 'w') as f:
+            json.dump(task, f, indent=2)
+
     def run(self):
         """
         Runs cellmaps_downloader
@@ -266,39 +316,37 @@ class CellmapsdownloaderRunner(object):
 
         :return:
         """
-        self._create_output_directory()
-        self._setup_filelogger()
-        logger.debug('In run()')
-        self._copy_over_tsvfile()
+        try:
+            exitcode = 99
+            self._create_output_directory()
+            self._setup_filelogger()
+            self._write_task_start_json()
+            logger.debug('In run()')
+            self._copy_over_tsvfile()
 
-        # todo, copy over tsv file
+            # todo, copy over tsv file?
 
-        # todo need a JSON file for start
-        # what should we put in this file?
-        # start time,
-        # version of this software
-        # all input flags
-        # full path to output directory?
-        # host running command?
-        # user running command?
+            downloadtuples = self._get_download_tuples_from_tsv()
 
-        downloadtuples = self._get_download_tuples_from_tsv()
+            if self._imagedownloader is None:
+                raise CellMapsDownloaderError('Image downloader is None')
 
-        if self._imagedownloader is None:
-            raise CellMapsDownloaderError('Image downloader is None')
+            failed_downloads = self._imagedownloader.download_images(downloadtuples)
 
-        failed_downloads = self._imagedownloader.download_images(downloadtuples)
-
-        if len(failed_downloads) > 0:
-            logger.error(str(len(failed_downloads)) +
-                         ' images failed to download. Retrying')
-            # try one more time with files that failed
-            raise CellMapsDownloaderError('Not implemented yet!!!')
-            return 1
-        return 0
-        # todo need a JSON file for completion
-        # what should we put in this file?
-        # end time
-        # duration
-        # success status
-        # summary of failures?
+            if len(failed_downloads) > 0:
+                logger.error(str(len(failed_downloads)) +
+                             ' images failed to download. Retrying')
+                # try one more time with files that failed
+                raise CellMapsDownloaderError('Not implemented yet!!!')
+                exitcode = 1
+                return exitcode
+            exitcode = 0
+            return exitcode
+            # todo need a JSON file for completion
+            # what should we put in this file?
+            # end time
+            # duration
+            # success status
+            # summary of failures?
+        finally:
+            self._write_task_finish_json(status=exitcode)
