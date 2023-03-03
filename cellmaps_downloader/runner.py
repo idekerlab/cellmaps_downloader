@@ -84,13 +84,19 @@ class MultiProcessImageDownloader(ImageDownloader):
     Uses multiprocess package to download images in parallel
     """
 
-    def __init__(self, poolsize=1, skip_existing=False):
+    def __init__(self, poolsize=1, skip_existing=False,
+                 override_dfunc=None):
         """
         Constructor
         """
         super().__init__()
         self._poolsize = poolsize
-        self._skip_existing = skip_existing
+        if override_dfunc is not None:
+            self._dfunc = override_dfunc
+        else:
+            self._dfunc = download_file
+            if skip_existing is True:
+                self._dfunc = download_file_skip_existing
 
     def download_images(self, download_list=None):
         """
@@ -100,10 +106,6 @@ class MultiProcessImageDownloader(ImageDownloader):
         :return: of tuples (`http status code`, `text of error`, (`link`, `destfile`))
         :rtype: list
         """
-        dfunc = download_file
-        if self._skip_existing is True:
-            dfunc = download_file_skip_existing
-
         failed_downloads = []
         logger.debug('Poolsize for image downloader set to: ' +
                      str(self._poolsize))
@@ -112,7 +114,7 @@ class MultiProcessImageDownloader(ImageDownloader):
             logger.info(str(num_to_download) + ' images to download')
             t = tqdm(total=num_to_download, desc='Download',
                      unit='images')
-            for i in pool.imap_unordered(dfunc,
+            for i in pool.imap_unordered(self._dfunc,
                                          download_list):
                 t.update()
                 if i is not None:
@@ -353,7 +355,8 @@ class CellmapsdownloaderRunner(object):
             self._setup_filelogger()
             self._write_task_start_json()
             self._copy_over_tsvfile()
-            return self._download_images()
+            exitcode = self._download_images()
+            return exitcode
         finally:
             # write a task finish file no matter what
             self._write_task_finish_json(status=exitcode)
