@@ -337,6 +337,7 @@ class CellmapsdownloaderRunner(object):
             logger.error(str(len(failed_downloads)) +
                          ' images failed to download. Retrying')
             # try one more time with files that failed
+            # todo need to implement a retry
             raise CellMapsDownloaderError('Not implemented yet!!!')
         return 0
 
@@ -355,7 +356,12 @@ class CellmapsdownloaderRunner(object):
             self._setup_filelogger()
             self._write_task_start_json()
             self._copy_over_tsvfile()
+
+            # todo obtain bioplex data and store as well
+
             exitcode = self._download_images()
+
+            # todo need to validate downloaded image data
             return exitcode
         finally:
             # write a task finish file no matter what
