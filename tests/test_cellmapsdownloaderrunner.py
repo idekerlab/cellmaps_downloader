@@ -57,6 +57,66 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir)
 
+    def test_download_file_failure(self):
+        temp_dir = tempfile.mkdtemp()
+
+        try:
+            mockurl = 'http://fakey.fake.com/ha.txt'
+
+            with requests_mock.mock() as m:
+                m.get(mockurl, status_code=500,
+                      text='error')
+                a_dest_file = os.path.join(temp_dir, 'downloadedfile.txt')
+                rstatus, rtext, rtuple = runner.download_file((mockurl, a_dest_file))
+            self.assertEqual(500, rstatus)
+            self.assertEqual('error', rtext)
+            self.assertEqual((mockurl, a_dest_file), rtuple)
+            self.assertFalse(os.path.isfile(a_dest_file))
+
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_download_file_skip_existing_empty_file_exists(self):
+        temp_dir = tempfile.mkdtemp()
+
+        try:
+            mockurl = 'http://fakey.fake.com/ha.txt'
+
+            with requests_mock.mock() as m:
+                m.get(mockurl, status_code=200,
+                      text='somedata')
+                a_dest_file = os.path.join(temp_dir, 'downloadedfile.txt')
+                open(a_dest_file, 'a').close()
+
+                runner.download_file_skip_existing((mockurl, a_dest_file))
+            self.assertTrue(os.path.isfile(a_dest_file))
+            with open(a_dest_file, 'r') as f:
+                data = f.read()
+                self.assertEqual('somedata', data)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_download_file_skip_existing_file_exists(self):
+        temp_dir = tempfile.mkdtemp()
+
+        try:
+            mockurl = 'http://fakey.fake.com/ha.txt'
+
+            with requests_mock.mock() as m:
+                m.get(mockurl, status_code=200,
+                      text='somedata')
+                a_dest_file = os.path.join(temp_dir, 'downloadedfile.txt')
+                with open(a_dest_file, 'w') as f:
+                    f.write('blah')
+
+                self.assertIsNone(runner.download_file_skip_existing((mockurl, a_dest_file)))
+            self.assertTrue(os.path.isfile(a_dest_file))
+            with open(a_dest_file, 'r') as f:
+                data = f.read()
+                self.assertEqual('blah', data)
+        finally:
+            shutil.rmtree(temp_dir)
+
     def test_create_output_directory(self):
         temp_dir = tempfile.mkdtemp()
         try:
@@ -141,6 +201,56 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
                                      os.path.join(temp_dir, c,
                                                   fname +
                                                   c + '.jpg')) in dtuples)
+
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_run_success(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            link = 'https://x.y.z/359/'
+            f_name_one = '1_A1_1_'
+
+            tsvfile = os.path.join(temp_dir, 'foo.tsv')
+            with open(tsvfile, 'w') as f:
+                f.write('gene_names\tfile_link\tfile_name\n')
+                f.write('FOO1\t' + link + f_name_one + '\t' +
+                        f_name_one + '\n')
+            o_dir = os.path.join(temp_dir, 'outdir')
+
+            with requests_mock.mock() as m:
+                for c in CellmapsdownloaderRunner.COLORS:
+                    mockurl = link + f_name_one + c + '.jpg'
+                    m.get(mockurl, status_code=200,
+                          text=c)
+                runner = CellmapsdownloaderRunner(outdir=o_dir, tsvfile=tsvfile)
+                self.assertEqual(0, runner.run())
+
+            for c in CellmapsdownloaderRunner.COLORS:
+                imgfile = os.path.join(o_dir, c, '1_A1_1_' + c + '.jpg')
+                self.assertTrue(os.path.isfile(imgfile))
+                with open(imgfile, 'r') as f:
+                    self.assertEqual(c, f.read())
+            self.assertTrue(os.path.isfile(runner._get_input_tsvfile()))
+            start_json = None
+            finish_json = None
+            for entry in os.listdir(o_dir):
+                if entry.endswith('_start.json'):
+                    start_json = os.path.join(o_dir, entry)
+                elif entry.endswith('_finish.json'):
+                    finish_json = os.path.join(o_dir, entry)
+            self.assertTrue(os.path.isfile(start_json))
+            self.assertTrue(os.path.isfile(finish_json))
+
+            with open(start_json, 'r') as f:
+                data = json.load(f)
+                self.assertEqual(cellmaps_downloader.__version__, data['version'])
+            with open(finish_json, 'r') as f:
+                data = json.load(f)
+                self.assertEqual('0', data['status'])
+
+
+
 
         finally:
             shutil.rmtree(temp_dir)
