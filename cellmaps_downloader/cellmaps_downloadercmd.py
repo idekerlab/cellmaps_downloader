@@ -45,6 +45,29 @@ def _parse_arguments(desc, args):
                         help='TSV file with list of IF images to download '
                              'in format of gene_names\tfile_link\tfile_name\n'
                              'GOLGA5\thttps://images.proteinatlas.org/992/1_A1_1_\t1_A1_1_')
+    parser.add_argument('--samples',
+                        help='CSV file with information about samples in '
+                             'format of:\n'
+                             'filename,if_plate_id,position,sample,status,'
+                             'locations,'
+                             'antibody,ensembl_ids,gene_names\n'
+                             '/archive/1/1_A1_1_,1,A1,1,35,Golgi apparatus,'
+                             'HPA000992,ENSG00000066455,GOLGA5')
+    parser.add_argument('--antibodies',
+                        help='CSV file with information about antibodies '
+                             'in format of:\n'
+                             'antibody,ensembl_ids,gene_names,atlas_name,'
+                             'locations,n_location\n'
+                             'HPA040086,ENSG00000094914,AAAS,U-2 OS,'
+                             'Nuclear membrane,1')
+    parser.add_argument('--apms_edgelist',
+                        help='APMS edgelist TSV file in format of:\n'
+                             'GeneID1\tSymbol1\tGeneID2\tSymbol2\n'
+                             '10159\tATP6AP2\t2\tA2M')
+    parser.add_argument('--apms_baitlist',
+                        help='APMS baitlist TSV file in format of:\n'
+                             'GeneSymbol\tGeneID\t# Interactors\n'
+                             '"ADA"\t"100"\t1.')
     parser.add_argument('--poolsize', type=int,
                         default=4,
                         help='If using multiprocessing image downloader, '
