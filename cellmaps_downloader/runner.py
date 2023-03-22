@@ -140,7 +140,8 @@ class CellmapsdownloaderRunner(object):
 
     def __init__(self, outdir=None, tsvfile=None,
                  imgsuffix='.jpg',
-                 imagedownloader=MultiProcessImageDownloader()):
+                 imagedownloader=MultiProcessImageDownloader(),
+                 apmsgen=None):
         """
         Constructor
 
@@ -157,6 +158,7 @@ class CellmapsdownloaderRunner(object):
         self._imgsuffix = imgsuffix
         self._start_time = int(time.time())
         self._end_time = -1
+        self._apmsgen = apmsgen
 
     def _setup_filelogger(self):
         """
@@ -341,6 +343,30 @@ class CellmapsdownloaderRunner(object):
             raise CellMapsDownloaderError('Not implemented yet!!!')
         return 0
 
+    def _write_gene_node_attrs(self, gene_node_attrs=None,
+                               errors=None):
+        """
+
+        :param gene_node_attrs:
+        :param errors:
+        :return:
+        """
+        with open(os.path.join(self._outdir,
+                               'apms_gene_node_attributes.tsv'),
+                               'w') as f:
+            f.write('\t'.join(['name', 'represents', 'ambiguous', 'bait']) +
+                    '\n')
+            for key in gene_node_attrs:
+                f.write('\t'.join([gene_node_attrs[key]['name'],
+                                   gene_node_attrs[key]['represents'],
+                                   gene_node_attrs[key]['ambiguous'],
+                                   str(gene_node_attrs[key]['bait'])]))
+                f.write('\n')
+        if errors is not None:
+            with open(os.path.join(self._outdir, 'apms_gene_node_attributes.errors'), 'w') as f:
+                for e in errors:
+                    f.write(str(e) + '\n')
+
     def run(self):
         """
         Downloads images to output directory specified in constructor
@@ -357,7 +383,17 @@ class CellmapsdownloaderRunner(object):
             self._write_task_start_json()
             self._copy_over_tsvfile()
 
-            # todo obtain bioplex data and store as well
+
+            # obtain apms data
+            if self._apmsgen is not None:
+                gene_node_attrs, errors = self._apmsgen.get_gene_node_attributes()
+
+                # write apms attribute data
+                self._write_gene_node_attrs(gene_node_attrs, errors)
+
+                # write apms network
+
+                # write image attribute data
 
             exitcode = self._download_images()
 

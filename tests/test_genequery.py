@@ -7,8 +7,8 @@ import os
 import unittest
 import tempfile
 import shutil
-import requests_mock
 import json
+from unittest.mock import MagicMock
 import cellmaps_downloader
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
 from cellmaps_downloader.gene import GeneQuery
@@ -26,6 +26,19 @@ class TestGeneQuery(unittest.TestCase):
 
     def tearDown(self):
         """Tear down test fixtures, if any."""
+
+    def test_querymany(self):
+        mockquery = MagicMock()
+
+        mockquery.querymany = MagicMock(return_value={})
+        query = GeneQuery(mygeneinfo=mockquery)
+        res = query.querymany(queries=['hi'], scopes='thescope',
+                              fields=['field1'],
+                              species='human')
+        self.assertEqual({}, res)
+        mockquery.querymany.assert_called_once_with(['hi'], scopes='thescope',
+                                                    fields=['field1'],
+                                                    species='human')
 
     @unittest.skipUnless(os.getenv('CELLMAPS_DOWNLOADER_INTEGRATION_TEST') is not None, SKIP_REASON)
     def test_simple_query(self):

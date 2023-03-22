@@ -2,6 +2,9 @@
 import re
 import csv
 import mygene
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class GeneQuery(object):
@@ -55,15 +58,24 @@ class GeneNodeAttributeGenerator(object):
                            ambiguous_gene_dict=None,
                            geneid=None):
         """
+        Examines **geneid** passed in and if a comma exists
+        in value split by comma and assume multiple genes.
+        Adds those genes into **gene_set** and add entry
+        to **ambiguous_gene_dict** with key set to each gene
+        name and value set to original **geneid** value
 
-        :param gene_set:
-        :param geneid:
-        :return:
+        :param gene_set: unique set of genes
+        :type gene_set: set
+        :param geneid: name of gene or comma delimited string of genes
+        :type geneid: str
+        :return: genes found in **geneid** or None if **gene_set**
+                 or **geneid** is ``None``
+        :rtype: list
         """
         if gene_set is None:
-            return
+            return None
         if geneid is None:
-            return
+            return None
 
         split_str = re.split('\W*,\W*', geneid)
         gene_set.update(split_str)
@@ -73,39 +85,96 @@ class GeneNodeAttributeGenerator(object):
                     ambiguous_gene_dict[entry] = geneid
         return split_str
 
+    def get_gene_node_attributes(self):
+        """
+        Should be implemented by subclasses
+
+        :raises NotImplementedError: Always
+        """
+        raise NotImplementedError('Subclasses should implement')
+
 
 class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
     """
     Creates Image Gene Node Attributes table
     """
+
     def __init__(self):
         """
         Constructor
         """
         super().__init__()
 
+    def get_gene_node_attributes(self):
+        """
+        TODO: need to implement this
+
+        :return:
+        """
+        return None
+
 
 class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
     """
     Creates APMS Gene Node Attributes table
     """
+
     def __init__(self, apms_edgelist=None, apms_baitlist=None,
                  genequery=GeneQuery()):
         """
         Constructor
+
+        :param apms_edgelist: list of dict elements where each
+                              dict is of format:
+
+                              .. code-block::
+
+                                  {'GeneID1': VAL,
+                                   'Symbol1': VAL,
+                                   'GeneID2': VAL,
+                                   'Symbol2': VAL}
+        :type apms_edgelist: list
+        :param apms_baitlist: list of dict elements where each dict is of
+                              format:
+
+                              .. code-block::
+
+                                  { 'GeneSymbol': VAL,
+                                    'GeneID': VAL,
+                                    'NumIteractors': VAL }
+        :type apms_baitlist: list
+        :param genequery:
         """
         super().__init__()
         self._apms_edgelist = apms_edgelist
         self._apms_baitlist = apms_baitlist
         self._genequery = genequery
 
-    def _get_edgelist(self):
+    @staticmethod
+    def get_apms_edgelist_from_tsvfile(tsvfile=None):
         """
+        Generates list of dicts by parsing TSV file specified
+        by **tsvfile** with the
+        format header column and corresponding values:
 
-        :return:
+        .. code-block::
+
+            GeneID1\tSymbol1\tGeneID2\tSymbol2
+
+        :param tsvfile: Path to TSV file with above format
+        :type tsvfile: str
+        :return: list of dicts, with each dict of format:
+
+                 .. code-block::
+
+                      {'GeneID1': VAL,
+                       'Symbol1': VAL,
+                       'GeneID2': VAL,
+                       'Symbol2': VAL}
+        :rtype: list
         """
         edgelist = []
-        with open(self._apms_edgelist, 'r') as f:
+        with open(tsvfile, 'r') as f:
             reader = csv.DictReader(f, delimiter='\t')
             for row in reader:
                 edgelist.append({'GeneID1': row['GeneID1'],
@@ -114,7 +183,47 @@ class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                                  'Symbol2': row['Symbol2']})
         return edgelist
 
-    def _get_unique_genelist_from_edgelist(self, edgelist=None):
+    @staticmethod
+    def get_apms_baitlist_from_tsvfile(tsvfile=None):
+        """
+        Generates list of dicts by parsing TSV file specified
+        by **tsvfile** with the
+        format header column and corresponding values:
+
+        .. code-block::
+
+            GeneSymbol\tGeneID\t# Interactors
+
+        :param tsvfile: Path to TSV file with above format
+        :type tsvfile: str
+        :return: list of dicts, with each dict of format:
+
+                 .. code-block::
+
+                      { 'GeneSymbol': VAL,
+                        'GeneID': VAL,
+                        'NumIteractors': VAL }
+        :rtype: list
+        """
+        edgelist = []
+        with open(tsvfile, 'r') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            for row in reader:
+                edgelist.append({'GeneSymbol': row['GeneSymbol'],
+                                 'GeneID': row['GeneID'],
+                                 'NumInteractors': row['# Interactors']})
+        return edgelist
+
+    def get_apms_edgelist(self):
+        """
+        Gets apms edgelist passed in via constructor
+
+        :return:
+        :rtype: list
+        """
+        return self._apms_edgelist
+
+    def _get_unique_genelist_from_edgelist(self):
         """
 
         :return: unique list of genes from edge list
@@ -123,7 +232,7 @@ class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         gene_set = set()
         ambiguous_gene_dict = {}
 
-        for row in edgelist:
+        for row in self._apms_edgelist:
             GeneNodeAttributeGenerator.add_geneids_to_set(gene_set=gene_set,
                                                           ambiguous_gene_dict=ambiguous_gene_dict,
                                                           geneid=row['GeneID1'])
@@ -132,59 +241,88 @@ class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                                                           geneid=row['GeneID2'])
         return list(gene_set), ambiguous_gene_dict
 
-    def _querygenes(self, genelist=None):
+    def _getsymbolsforgenes(self, genelist=None):
         """
         Queries for genes via GeneQuery() object passed in via
         constructor
-        :param genelist:
+
+        :param genelist: genes to query for valid symbols and ensembl ids
         :type genelist: list
-        :return:
-        :rtype: dict
+        :return: result from mygene which is a list of dict objects where
+                 each dict is of format:
+
+                 .. code-block::
+
+                     { 'query': 'ID',
+                       '_id': 'ID', '_score': #.##,
+                       'ensembl': { 'gene': 'ENSEMBLEID' },
+                       'symbol': 'GENESYMBOL' }
+        :rtype: list
         """
-        res = self._querygenes.querymany(genelist,
-                                         species='human',
-                                         scopes='_id',
-                                         fields=['ensembl.gene','symbol'])
+        res = self._genequery.querymany(genelist,
+                                                 species='human',
+                                                 scopes='_id',
+                                                 fields=['ensembl.gene', 'symbol'])
         return res
 
-    def _get_query_symbol_dicts(self, query_res=None):
+    def _get_apms_bait_set(self):
         """
 
-        :param genelist:
         :return:
         """
-        symbol_ensembl_dict = dict()
-        query_symbol_dict = dict()
-        symbol_query_dict = dict()
-        for x in query_res:
-            query_symbol_dict[x['query']] = x['symbol']
-            symbol_query_dict[x['symbol']] = x['query']
-
-            if x['symbol'] not in symbol_ensembl_dict:
-                symbol_ensembl_dict[x['symbol']] = 'ensembl:'
-            if 'ensembl' not in x:
-                continue
-            if len(x['ensembl']) > 1:
-                for g in x['ensembl']:
-                    symbol_ensembl_dict[x['symbol']] += g['gene'] + ';'
-            else:
-                symbol_ensembl_dict[x['symbol']] += x['ensembl']['gene']
-        return symbol_ensembl_dict, query_symbol_dict, symbol_query_dict
+        bait_set = set()
+        for entry in self._apms_baitlist:
+            bait_set.add(entry['GeneID'])
+        return bait_set
 
     def get_gene_node_attributes(self):
         """
+        Gene gene node attributes which is output as a list of
+        dicts in this format:
 
-        :return: list of dicts containing gene node attributes
-        :rtype: dict
+        .. code-block::
+
+            { 'GENEID': { 'name': 'GENESYMBOL',
+                          'represents': 'ensemble:ENSEMBLID1;ENSEMBLID2..',
+                          'ambiguous': 'ALTERNATE GENEs' }
+            }
+
+
+
+        :return: (list of dicts containing gene node attributes,
+                  list of str describing any errors encountered)
+        :rtype: tuple
         """
-        edgelist = self._get_edgelist()
-        genelist, ambiguous_gene_dict = self._get_unique_genelist_from_edgelist(edgelist=edgelist)
-        query_res = self._querygenes(genelist=genelist)
-        symbol_ensembl_dict,\
-        query_symbol_dict,\
-        symbol_query_dict = self._get_query_symbol_dicts(query_res=query_res)
+        genelist, ambiguous_gene_dict = self._get_unique_genelist_from_edgelist()
+        query_res = self._getsymbolsforgenes(genelist=genelist)
+        bait_set = self._get_apms_bait_set()
+        errors = []
+        gene_node_attrs = {}
+        for x in query_res:
+            if 'symbol' not in x:
+                errors.append('Skipping ' + str(x) +
+                              ' no symbol in query result: ' + str(x))
+                logger.error(errors[-1])
+                continue
 
-        for entry in edgelist:
-            pass
+            ensemblstr = 'ensembl:'
+            if 'ensembl' not in x:
+                errors.append('Skipping ' + str(x) +
+                              ' no ensembl in query result: ' + str(x))
+                logger.error(errors[-1])
+                continue
+            if len(x['ensembl']) > 1:
+                ensemblstr += ';'.join([g['gene'] for g in x['ensembl']])
+            else:
+                ensemblstr += x['ensembl']['gene']
 
+            ambiguous_str = ''
+            if x['symbol'] in ambiguous_gene_dict:
+                ambiguous_str = ambiguous_gene_dict[x['symbol']]
 
+            gene_node_attrs[x['query']] = {'name': x['symbol'],
+                                           'represents': ensemblstr,
+                                           'ambiguous': ambiguous_str,
+                                           'bait': x['query'] in bait_set}
+
+        return gene_node_attrs, errors

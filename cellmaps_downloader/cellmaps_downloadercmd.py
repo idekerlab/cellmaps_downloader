@@ -8,6 +8,7 @@ import logging.config
 import cellmaps_downloader
 from cellmaps_downloader.runner import MultiProcessImageDownloader
 from cellmaps_downloader.runner import CellmapsdownloaderRunner
+from cellmaps_downloader.gene import APMSGeneNodeAttributeGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -166,12 +167,15 @@ def main(args):
 
     try:
         _setup_logging(theargs)
+        apmsgen = APMSGeneNodeAttributeGenerator(apms_edgelist=APMSGeneNodeAttributeGenerator.get_apms_edgelist_from_tsvfile(theargs.apms_edgelist),
+                                                 apms_baitlist=APMSGeneNodeAttributeGenerator.get_apms_baitlist_from_tsvfile(theargs.apms_baitlist))
         dloader = MultiProcessImageDownloader(poolsize=theargs.poolsize,
                                               skip_existing=theargs.skip_existing)
         return CellmapsdownloaderRunner(outdir=theargs.outdir,
                                         tsvfile=theargs.tsv,
                                         imagedownloader=dloader,
-                                        imgsuffix=theargs.imgsuffix).run()
+                                        imgsuffix=theargs.imgsuffix,
+                                        apmsgen=apmsgen).run()
     except Exception as e:
         logger.exception('Caught exception: ' + str(e))
         return 2
