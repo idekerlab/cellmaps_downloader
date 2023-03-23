@@ -367,6 +367,23 @@ class CellmapsdownloaderRunner(object):
                 for e in errors:
                     f.write(str(e) + '\n')
 
+    def _write_apms_network(self, edgelist=None,
+                            gene_node_attrs=None):
+        """
+
+        :param edgelist:
+        :param gene_node_attrs:
+        :return:
+        """
+        # TODO Fix this
+        with open(os.path.join(self._outdir,
+                               'apms_edgelist.tsv'), 'w') as f:
+            f.write('geneA\tgeneB\n')
+            for edge in edgelist:
+                f.write(gene_node_attrs[edge['GeneID1']]['name'])
+                f.write('\t' + gene_node_attrs[edge['GeneID2']]['name'])
+                f.write('\n')
+
     def run(self):
         """
         Downloads images to output directory specified in constructor
@@ -392,6 +409,9 @@ class CellmapsdownloaderRunner(object):
                 self._write_gene_node_attrs(gene_node_attrs, errors)
 
                 # write apms network
+                # TODO Fix this
+                # self._write_apms_network(edgelist=self._apmsgen.get_apms_edgelist(),
+                #                         gene_node_attrs=gene_node_attrs)
 
                 # write image attribute data
 
