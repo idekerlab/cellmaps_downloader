@@ -375,14 +375,26 @@ class CellmapsdownloaderRunner(object):
         :param gene_node_attrs:
         :return:
         """
-        # TODO Fix this
         with open(os.path.join(self._outdir,
                                'apms_edgelist.tsv'), 'w') as f:
             f.write('geneA\tgeneB\n')
             for edge in edgelist:
-                f.write(gene_node_attrs[edge['GeneID1']]['name'])
-                f.write('\t' + gene_node_attrs[edge['GeneID2']]['name'])
-                f.write('\n')
+                if edge['GeneID1'] not in gene_node_attrs:
+                    logger.error('Skipping ' + str(edge['GeneID1'] + ' cause it lacks a symbol'))
+                    continue
+                if edge['GeneID2'] not in gene_node_attrs:
+                    logger.error('Skipping ' + str(edge['GeneID2'] + ' cause it lacks a symbol'))
+                    continue
+
+                genea = gene_node_attrs[edge['GeneID1']]['name']
+                geneb = gene_node_attrs[edge['GeneID2']]['name']
+                if genea is None or geneb is None:
+                    logger.error('Skipping edge cause no symbol is found: ' + str(edge))
+                    continue
+                if len(genea) == 0 or len(geneb) == 0:
+                    logger.error('Skipping edge cause no symbol is found: ' + str(edge))
+                    continue
+                f.write(genea + '\t' + geneb + '\n')
 
     def run(self):
         """
@@ -410,8 +422,8 @@ class CellmapsdownloaderRunner(object):
 
                 # write apms network
                 # TODO Fix this
-                # self._write_apms_network(edgelist=self._apmsgen.get_apms_edgelist(),
-                #                         gene_node_attrs=gene_node_attrs)
+                self._write_apms_network(edgelist=self._apmsgen.get_apms_edgelist(),
+                                         gene_node_attrs=gene_node_attrs)
 
                 # write image attribute data
 
