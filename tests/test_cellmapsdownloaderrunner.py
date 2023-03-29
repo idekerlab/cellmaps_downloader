@@ -249,8 +249,5 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
                 data = json.load(f)
                 self.assertEqual('0', data['status'])
 
-
-
-
         finally:
             shutil.rmtree(temp_dir)
