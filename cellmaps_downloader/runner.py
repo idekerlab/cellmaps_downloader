@@ -7,10 +7,9 @@ import shutil
 import logging
 import logging.config
 import requests
-import json
 import time
-import platform
 from tqdm import tqdm
+from cellmaps_utils import cellmaps_io
 import cellmaps_downloader
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
 
@@ -160,47 +159,6 @@ class CellmapsdownloaderRunner(object):
         self._end_time = -1
         self._apmsgen = apmsgen
 
-    def _setup_filelogger(self):
-        """
-        Sets up a logger to write all debug logs
-        to output directory/output.log
-        and all error level log messages and higher
-        to output directory/error.log
-
-        :return: None
-        """
-        logging.config.dictConfig({'version': 1,
-                                   'disable_existing_loggers': False,
-                                   'loggers': {
-                                     '': {
-                                         'level': 'NOTSET',
-                                         'handlers': ['cellmapsdownloader_file_handler',
-                                                      'cellmapsdownloader_error_file_handler']
-                                     }
-                                   },
-                                   'handlers': {
-                                       'cellmapsdownloader_file_handler': {
-                                           'level': 'DEBUG',
-                                           'class': 'logging.FileHandler',
-                                           'formatter': 'cellmaps_formatter',
-                                           'filename': os.path.join(self._outdir, 'output.log'),
-                                           'mode': 'a'
-                                       },
-                                       'cellmapsdownloader_error_file_handler': {
-                                           'level': 'ERROR',
-                                           'class': 'logging.FileHandler',
-                                           'formatter': 'cellmaps_formatter',
-                                           'filename': os.path.join(self._outdir, 'error.log'),
-                                           'mode': 'a'
-                                       }
-                                   },
-                                   'formatters': {
-                                       'cellmaps_formatter': {
-                                           'format': '%(asctime)-15s %(levelname)s %(relativeCreated)dms %(filename)s::%(funcName)s():%(lineno)d %(message)s'
-                                       }
-                                   }
-                                   })
-
     def _create_output_directory(self):
         """
 
@@ -281,47 +239,14 @@ class CellmapsdownloaderRunner(object):
         else:
             tsvfile = os.path.abspath(self._tsvfile)
 
-        task = {'start_time': self._start_time,
-                'version': str(cellmaps_downloader.__version__),
-                'pid': str(os.getpid()),
-                'tsvfile': tsvfile,
-                'outdir': self._outdir,
+        data = {'tsvfile': tsvfile,
                 'image_downloader': str(self._imagedownloader),
-                'image_suffix': self._imgsuffix,
-                'login': str(os.getlogin()),
-                'cwd': str(os.getcwd()),
-                'platform': str(platform.platform()),
-                'python': str(platform.python_version()),
-                'system': str(platform.system()),
-                'uname': str(platform.uname())
-                }
-        with open(os.path.join(self._outdir,
-                               'task_' + str(self._start_time) +
-                               '_start.json'), 'w') as f:
-            json.dump(task, f, indent=2)
+                'image_suffix': self._imgsuffix}
 
-    def _write_task_finish_json(self, status=None):
-        """
-        Writes task_finish.json file with information about
-        what is to be run
-
-        :return:
-        """
-        if self._outdir is None or not os.path.isdir(self._outdir):
-            logger.error('Output directory is not set or not a '
-                         'directory, cannot write'
-                         'task finish json file')
-            return
-        if self._end_time == -1:
-            self._end_time = int(time.time())
-        task = {'end_time': self._end_time,
-                'elapsed_time': int(self._end_time - self._start_time),
-                'status': str(status)
-                }
-        with open(os.path.join(self._outdir,
-                               'task_' + str(self._start_time) +
-                               '_finish.json'), 'w') as f:
-            json.dump(task, f, indent=2)
+        cellmaps_io.write_task_start_json(outdir=self._outdir,
+                                          start_time=self._start_time,
+                                          version=cellmaps_downloader.__version__,
+                                          data=data)
 
     def _download_images(self):
         """
@@ -353,7 +278,7 @@ class CellmapsdownloaderRunner(object):
         """
         with open(os.path.join(self._outdir,
                                'apms_gene_node_attributes.tsv'),
-                               'w') as f:
+                  'w') as f:
             f.write('\t'.join(['name', 'represents', 'ambiguous', 'bait']) +
                     '\n')
             for key in gene_node_attrs:
@@ -408,7 +333,8 @@ class CellmapsdownloaderRunner(object):
             exitcode = 99
 
             self._create_output_directory()
-            self._setup_filelogger()
+            cellmaps_io.setup_filelogger(outdir=self._outdir,
+                                         handlerprefix='cellmaps_downloader')
             self._write_task_start_json()
             self._copy_over_tsvfile()
 
@@ -432,5 +358,9 @@ class CellmapsdownloaderRunner(object):
             # todo need to validate downloaded image data
             return exitcode
         finally:
+            self._end_time = int(time.time())
             # write a task finish file no matter what
-            self._write_task_finish_json(status=exitcode)
+            cellmaps_io.write_task_finish_json(outdir=self._outdir,
+                                               start_time=self._start_time,
+                                               end_time=self._end_time,
+                                               status=exitcode)
