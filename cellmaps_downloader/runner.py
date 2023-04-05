@@ -136,6 +136,9 @@ class CellmapsdownloaderRunner(object):
     COLORS = [RED, BLUE, GREEN, YELLOW]
 
     TSVFILE = 'immunofluorescent.tsv'
+    APMS_EDGELIST_FILE = 'apms_edgelist.tsv'
+    APMS_GENE_NODE_ATTR_FILE = 'apms_gene_node_attributes.tsv'
+    APMS_GENE_NODE_ERRORS_FILE = 'apms_gene_node_attributes.errors'
 
     def __init__(self, outdir=None, tsvfile=None,
                  imgsuffix='.jpg',
@@ -268,6 +271,22 @@ class CellmapsdownloaderRunner(object):
             raise CellMapsDownloaderError('Not implemented yet!!!')
         return 0
 
+    def get_apms_gene_node_attributes_file(self):
+        """
+
+        :return:
+        """
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.APMS_GENE_NODE_ATTR_FILE)
+
+    def get_apms_gene_node_errors_file(self):
+        """
+
+        :return:
+        """
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.APMS_GENE_NODE_ERRORS_FILE)
+
     def _write_gene_node_attrs(self, gene_node_attrs=None,
                                errors=None):
         """
@@ -276,9 +295,7 @@ class CellmapsdownloaderRunner(object):
         :param errors:
         :return:
         """
-        with open(os.path.join(self._outdir,
-                               'apms_gene_node_attributes.tsv'),
-                  'w') as f:
+        with open(self.get_apms_gene_node_attributes_file(), 'w') as f:
             f.write('\t'.join(['name', 'represents', 'ambiguous', 'bait']) +
                     '\n')
             for key in gene_node_attrs:
@@ -288,9 +305,17 @@ class CellmapsdownloaderRunner(object):
                                    str(gene_node_attrs[key]['bait'])]))
                 f.write('\n')
         if errors is not None:
-            with open(os.path.join(self._outdir, 'apms_gene_node_attributes.errors'), 'w') as f:
+            with open(self.get_apms_gene_node_errors_file(), 'w') as f:
                 for e in errors:
                     f.write(str(e) + '\n')
+
+    def get_apms_edgelist_file(self):
+        """
+
+        :return:
+        """
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.APMS_EDGELIST_FILE)
 
     def _write_apms_network(self, edgelist=None,
                             gene_node_attrs=None):
@@ -300,8 +325,7 @@ class CellmapsdownloaderRunner(object):
         :param gene_node_attrs:
         :return:
         """
-        with open(os.path.join(self._outdir,
-                               'apms_edgelist.tsv'), 'w') as f:
+        with open(self.get_apms_edgelist_file(), 'w') as f:
             f.write('geneA\tgeneB\n')
             for edge in edgelist:
                 if edge['GeneID1'] not in gene_node_attrs:
@@ -337,7 +361,6 @@ class CellmapsdownloaderRunner(object):
                                          handlerprefix='cellmaps_downloader')
             self._write_task_start_json()
             self._copy_over_tsvfile()
-
 
             # obtain apms data
             if self._apmsgen is not None:
