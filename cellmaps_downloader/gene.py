@@ -99,11 +99,31 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
     Creates Image Gene Node Attributes table
     """
 
-    def __init__(self):
+    def __init__(self, antibody_list=None):
         """
         Constructor
         """
         super().__init__()
+        self._antibody_list = antibody_list
+
+    @staticmethod
+    def get_image_antibodies_from_csvfile(csvfile=None):
+        """
+
+        :param csvfile:
+        :return:
+        """
+        antibodies = []
+        with open(csvfile, 'r') as f:
+            reader = csv.DictReader(f, delimiter=',')
+            for row in reader:
+                antibodies.append({'antibody': row['antibody'],
+                                   'ensembl_ids': row['ensembl_ids'],
+                                   'gene_names': row['gene_names'],
+                                   'atlas_name': row['atlas_name'],
+                                   'locations': row['locations'],
+                                   'n_location': row['n_location']})
+        return antibodies
 
     def get_gene_node_attributes(self):
         """

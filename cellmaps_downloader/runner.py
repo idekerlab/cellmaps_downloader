@@ -143,7 +143,8 @@ class CellmapsdownloaderRunner(object):
     def __init__(self, outdir=None, tsvfile=None,
                  imgsuffix='.jpg',
                  imagedownloader=MultiProcessImageDownloader(),
-                 apmsgen=None):
+                 apmsgen=None,
+                 imagegen=None):
         """
         Constructor
 
@@ -161,6 +162,7 @@ class CellmapsdownloaderRunner(object):
         self._start_time = int(time.time())
         self._end_time = -1
         self._apmsgen = apmsgen
+        self._imagegen = imagegen
 
     def _create_output_directory(self):
         """
@@ -370,11 +372,11 @@ class CellmapsdownloaderRunner(object):
                 self._write_gene_node_attrs(gene_node_attrs, errors)
 
                 # write apms network
-                # TODO Fix this
                 self._write_apms_network(edgelist=self._apmsgen.get_apms_edgelist(),
                                          gene_node_attrs=gene_node_attrs)
 
-                # write image attribute data
+
+            # write image attribute data
 
             exitcode = self._download_images()
 
