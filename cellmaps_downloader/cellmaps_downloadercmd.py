@@ -86,8 +86,10 @@ def _parse_arguments(desc, args):
                              'logging.config.html#logging-config-fileformat '
                              'Setting this overrides -v parameter which uses '
                              ' default logger. (default None)')
-    parser.add_argument('--exitcode', help='Exit code this command will return',
-                        default=0, type=int)
+    parser.add_argument('--skip_logging', action='store_true',
+                        help='If set, output.log, error.log and '
+                             'task_#_start/finish.json '
+                             'files will not be created')
     parser.add_argument('--verbose', '-v', action='count', default=0,
                         help='Increases verbosity of logger to standard '
                              'error for log messages in this module. Messages are '
@@ -178,7 +180,8 @@ def main(args):
                                         imagedownloader=dloader,
                                         imgsuffix=theargs.imgsuffix,
                                         apmsgen=apmsgen,
-                                        imagegen=imagegen).run()
+                                        imagegen=imagegen,
+                                        skip_logging=theargs.skip_logging).run()
     except Exception as e:
         logger.exception('Caught exception: ' + str(e))
         return 2

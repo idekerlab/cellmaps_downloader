@@ -129,22 +129,52 @@ class CellmapsdownloaderRunner(object):
     """
 
     RED = 'red'
+    """
+    Red color directory name and color name
+    in red color files
+    """
+
     BLUE = 'blue'
+    """
+    Blue color directory name and color name
+    in blue color files
+    """
     GREEN = 'green'
+    """
+    Green color directory name and color name
+    in green color files
+    """
+
     YELLOW = 'yellow'
+    """
+    Yellow color directory name and color name
+    in yellow color files
+    """
 
     COLORS = [RED, BLUE, GREEN, YELLOW]
+    """
+    List of colors
+    """
 
     TSVFILE = 'immunofluorescent.tsv'
+    """
+    Copy of input tsv file that is stored in output
+    directory by the :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
+    """
+
     APMS_EDGELIST_FILE = 'apms_edgelist.tsv'
     APMS_GENE_NODE_ATTR_FILE = 'apms_gene_node_attributes.tsv'
     APMS_GENE_NODE_ERRORS_FILE = 'apms_gene_node_attributes.errors'
+
+    IMAGE_GENE_NODE_ATTR_FILE = 'image_gene_node_attributes.tsv'
+    IMAGE_GENE_NODE_ERRORS_FILE = 'image_gene_node_attributes.errors'
 
     def __init__(self, outdir=None, tsvfile=None,
                  imgsuffix='.jpg',
                  imagedownloader=MultiProcessImageDownloader(),
                  apmsgen=None,
-                 imagegen=None):
+                 imagegen=None,
+                 skip_logging=False):
         """
         Constructor
 
@@ -152,8 +182,14 @@ class CellmapsdownloaderRunner(object):
         :type outdir: str
         :param tsvfile: image TSV file
         :type tsvfile: str
+        :param imgsuffix: suffix to append to image file names
+        :type imgsuffix: str
         :param imagedownloader: object that will perform image downloads
         :type imagedownloader: :py:class:`~cellmaps_downloader.runner.ImageDownloader`
+        :param apmsgen: gene node attribute generator for APMS data
+        :type apmsgen: :py:class:`~cellmaps_downloader.gene.APMSGeneNodeAttributeGenerator`
+        :param imagegen: gene node attribute generator for IF image data
+        :type imagegen: :py:class:`~cellmaps_downloader.gene.ImageGeneNodeAttributeGenerator`
         """
         self._outdir = outdir
         self._tsvfile = tsvfile
@@ -163,12 +199,16 @@ class CellmapsdownloaderRunner(object):
         self._end_time = -1
         self._apmsgen = apmsgen
         self._imagegen = imagegen
+        if skip_logging is None:
+            self._skip_logging = False
+        else:
+            self._skip_logging = skip_logging
 
     def _create_output_directory(self):
         """
+        Creates output directory if it does not already exist
 
         :raises CellmapsDownloaderError: If output directory is None
-        :return: None
         """
         if self._outdir is None:
             raise CellMapsDownloaderError('Output directory is None')
@@ -184,8 +224,11 @@ class CellmapsdownloaderRunner(object):
 
     def _get_input_tsvfile(self):
         """
+        Gets path to tsvfile that is copied into output directory specified via
+        constructor
 
-        :return:
+        :return: Path to file
+        :rtype: str
         """
         return os.path.join(self._outdir,
                             CellmapsdownloaderRunner.TSVFILE)
@@ -202,8 +245,13 @@ class CellmapsdownloaderRunner(object):
 
     def _get_color_download_map(self):
         """
+        Creates a dict where key is color name and value is directory
+        path for files for that color
 
-        :return:
+        ``{'red': '/tmp/foo/red'}``
+
+        :return: map of colors to directory paths
+        :rtype: dict
         """
         color_d_map = {}
         for c in CellmapsdownloaderRunner.COLORS:
@@ -213,7 +261,10 @@ class CellmapsdownloaderRunner(object):
     def _get_download_tuples_from_tsv(self):
         """
         Gets download list from TSV file for the 4 colors
-        :return:
+
+        :return: list of (image download URL prefix,
+                          file path where image should be written)
+        :rtype: list
         """
         dtuples = []
 
@@ -237,7 +288,6 @@ class CellmapsdownloaderRunner(object):
         Writes task_start.json file with information about
         what is to be run
 
-        :return:
         """
         if self._tsvfile is None:
             tsvfile = 'Not set'
@@ -255,8 +305,12 @@ class CellmapsdownloaderRunner(object):
 
     def _download_images(self):
         """
-
-        :return:
+        Uses downloader specified in constructor to download images noted in
+        tsvfile file also specified in constructor
+        :raises CellMapsDownloaderError: if image downloader is ``None`` or
+                                         if there are failed downloads
+        :return: 0 upon success otherwise, failure
+        :rtype: int
         """
         if self._imagedownloader is None:
             raise CellMapsDownloaderError('Image downloader is None')
@@ -275,22 +329,28 @@ class CellmapsdownloaderRunner(object):
 
     def get_apms_gene_node_attributes_file(self):
         """
+        Gets full path to apms gene node attribute file under output directory
+        created when invoking :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
 
-        :return:
+        :return: Path to file
+        :rtype: str
         """
         return os.path.join(self._outdir,
                             CellmapsdownloaderRunner.APMS_GENE_NODE_ATTR_FILE)
 
     def get_apms_gene_node_errors_file(self):
         """
+        Gets full path to apms gene node attribute errors file under output directory
+        created when invoking :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
 
-        :return:
+        :return: Path to file
+        :rtype: str
         """
         return os.path.join(self._outdir,
                             CellmapsdownloaderRunner.APMS_GENE_NODE_ERRORS_FILE)
 
-    def _write_gene_node_attrs(self, gene_node_attrs=None,
-                               errors=None):
+    def _write_apms_gene_node_attrs(self, gene_node_attrs=None,
+                                    errors=None):
         """
 
         :param gene_node_attrs:
@@ -347,6 +407,52 @@ class CellmapsdownloaderRunner(object):
                     continue
                 f.write(genea + '\t' + geneb + '\n')
 
+    def get_image_gene_node_attributes_file(self):
+        """
+        Gets full path to image gene node attribute file under output directory
+        created when invoking :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
+
+        :return: Path to file
+        :rtype: str
+        """
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.IMAGE_GENE_NODE_ATTR_FILE)
+
+    def get_image_gene_node_errors_file(self):
+        """
+        Gets full path to image gene node attribute errors file under output directory
+        created when invoking :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
+
+        :return: Path to file
+        :rtype: str
+        """
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.IMAGE_GENE_NODE_ERRORS_FILE)
+
+    def _write_image_gene_node_attrs(self, gene_node_attrs=None,
+                                     errors=None):
+        """
+
+        :param gene_node_attrs:
+        :param errors:
+        :return:
+        """
+        with open(self.get_image_gene_node_attributes_file(), 'w') as f:
+            f.write('\t'.join(['name', 'represents', 'ambiguous', 'antibody',
+                               'filename']) +
+                    '\n')
+            for key in gene_node_attrs:
+                f.write('\t'.join([gene_node_attrs[key]['name'],
+                                   gene_node_attrs[key]['represents'],
+                                   gene_node_attrs[key]['ambiguous'],
+                                   str(gene_node_attrs[key]['antibody']),
+                                   str(gene_node_attrs[key]['filename'])]))
+                f.write('\n')
+        if errors is not None:
+            with open(self.get_image_gene_node_errors_file(), 'w') as f:
+                for e in errors:
+                    f.write(str(e) + '\n')
+
     def run(self):
         """
         Downloads images to output directory specified in constructor
@@ -359,9 +465,10 @@ class CellmapsdownloaderRunner(object):
             exitcode = 99
 
             self._create_output_directory()
-            cellmaps_io.setup_filelogger(outdir=self._outdir,
-                                         handlerprefix='cellmaps_downloader')
-            self._write_task_start_json()
+            if self._skip_logging is False:
+                cellmaps_io.setup_filelogger(outdir=self._outdir,
+                                             handlerprefix='cellmaps_downloader')
+                self._write_task_start_json()
             self._copy_over_tsvfile()
 
             # obtain apms data
@@ -369,23 +476,28 @@ class CellmapsdownloaderRunner(object):
                 gene_node_attrs, errors = self._apmsgen.get_gene_node_attributes()
 
                 # write apms attribute data
-                self._write_gene_node_attrs(gene_node_attrs, errors)
+                self._write_apms_gene_node_attrs(gene_node_attrs, errors)
 
                 # write apms network
                 self._write_apms_network(edgelist=self._apmsgen.get_apms_edgelist(),
                                          gene_node_attrs=gene_node_attrs)
 
-
             # write image attribute data
+            if self._imagegen is not None:
+                image_gene_node_attrs, errors = self._imagegen.get_gene_node_attributes()
+
+                # write image attribute data
+                self._write_image_gene_node_attrs(image_gene_node_attrs, errors)
 
             exitcode = self._download_images()
-
             # todo need to validate downloaded image data
+
             return exitcode
         finally:
             self._end_time = int(time.time())
-            # write a task finish file no matter what
-            cellmaps_io.write_task_finish_json(outdir=self._outdir,
-                                               start_time=self._start_time,
-                                               end_time=self._end_time,
-                                               status=exitcode)
+            if self._skip_logging is False:
+                # write a task finish file
+                cellmaps_io.write_task_finish_json(outdir=self._outdir,
+                                                   start_time=self._start_time,
+                                                   end_time=self._end_time,
+                                                   status=exitcode)

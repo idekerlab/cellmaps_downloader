@@ -42,6 +42,34 @@ class GeneQuery(object):
                                         species=species)
         return mygene_out
 
+    def get_symbols_for_genes(self, genelist=None,
+                              scopes='_id'):
+        """
+        Queries for genes via GeneQuery() object passed in via
+        constructor
+
+        :param genelist: genes to query for valid symbols and ensembl ids
+        :type genelist: list
+        :param scopes: field to query on _id for gene id, ensemble.gene
+                       for ENSEMBLE IDs
+        :type scopes: str
+        :return: result from mygene which is a list of dict objects where
+                 each dict is of format:
+
+                 .. code-block::
+
+                     { 'query': 'ID',
+                       '_id': 'ID', '_score': #.##,
+                       'ensembl': { 'gene': 'ENSEMBLEID' },
+                       'symbol': 'GENESYMBOL' }
+        :rtype: list
+        """
+        res = self.querymany(genelist,
+                             species='human',
+                             scopes=scopes,
+                             fields=['ensembl.gene', 'symbol'])
+        return res
+
 
 class GeneNodeAttributeGenerator(object):
     """
@@ -99,12 +127,22 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
     Creates Image Gene Node Attributes table
     """
 
-    def __init__(self, antibody_list=None):
+    def __init__(self, antibody_list=None,
+                 genequery=GeneQuery()):
         """
         Constructor
         """
         super().__init__()
         self._antibody_list = antibody_list
+        self._genequery = genequery
+
+    def get_antibody_list(self):
+        """
+        Gets antibody_list passed in via the constructor
+
+        :return:
+        """
+        return self._antibody_list
 
     @staticmethod
     def get_image_antibodies_from_csvfile(csvfile=None):
@@ -125,13 +163,65 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                                    'n_location': row['n_location']})
         return antibodies
 
+    def _get_unique_genelist_from_antibodylist(self):
+        """
+        Gets unique list of ensemble IDS from antibody list along with a
+        dict for ambiguous genes which have multiple names.
+        For the ambiguous genes the dict is of format:
+
+        ``{'ENSEMBLEID': 'AMBIGUOUS ID aka x,y,z'}``
+
+        :return: (list of genes, dict of ambiguous genes)
+        :rtype: list
+        """
+        gene_set = set()
+        ambiguous_gene_dict = {}
+
+        for row in self._antibody_list:
+            GeneNodeAttributeGenerator.add_geneids_to_set(gene_set=gene_set,
+                                                          ambiguous_gene_dict=ambiguous_gene_dict,
+                                                          geneid=row['ensembl_ids'])
+        return list(gene_set), ambiguous_gene_dict
+
     def get_gene_node_attributes(self):
         """
         TODO: need to implement this
 
         :return:
         """
-        return None
+        genelist, ambiguous_gene_dict = self._get_unique_genelist_from_antibodylist()
+        query_res = self._genequery.get_symbols_for_genes(genelist=genelist,
+                                                          scopes='ensembl.gene')
+        errors = []
+        gene_node_attrs = {}
+        for x in query_res:
+            if 'symbol' not in x:
+                errors.append('Skipping ' + str(x) +
+                              ' no symbol in query result: ' + str(x))
+                logger.error(errors[-1])
+                continue
+            ensemblstr = 'ensembl:'
+            if 'ensembl' not in x:
+                errors.append('Skipping ' + str(x) +
+                              ' no ensembl in query result: ' + str(x))
+                logger.error(errors[-1])
+                continue
+            if len(x['ensembl']) > 1:
+                ensemblstr += ';'.join([g['gene'] for g in x['ensembl']])
+            else:
+                ensemblstr += x['ensembl']['gene']
+
+            ambiguous_str = ''
+            if x['symbol'] in ambiguous_gene_dict:
+                ambiguous_str = ambiguous_gene_dict[x['symbol']]
+
+            gene_node_attrs[x['query']] = {'name': x['symbol'],
+                                           'represents': ensemblstr,
+                                           'ambiguous': ambiguous_str,
+                                           'antibody': 'TODO',
+                                           'filename': 'TODO'}
+
+        return gene_node_attrs, errors
 
 
 class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
@@ -245,8 +335,13 @@ class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
 
     def _get_unique_genelist_from_edgelist(self):
         """
+        Gets unique list of genes from edge list along with a
+        dict for ambiguous genes which have multiple names.
+        For the ambiguous genes the dict is of format:
 
-        :return: unique list of genes from edge list
+        ``{'GENEID': 'AMBIGUOUS ID aka x,y,z'}``
+
+        :return: (list of genes, dict of ambiguous genes)
         :rtype: list
         """
         gene_set = set()
@@ -261,34 +356,12 @@ class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                                                           geneid=row['GeneID2'])
         return list(gene_set), ambiguous_gene_dict
 
-    def _getsymbolsforgenes(self, genelist=None):
-        """
-        Queries for genes via GeneQuery() object passed in via
-        constructor
-
-        :param genelist: genes to query for valid symbols and ensembl ids
-        :type genelist: list
-        :return: result from mygene which is a list of dict objects where
-                 each dict is of format:
-
-                 .. code-block::
-
-                     { 'query': 'ID',
-                       '_id': 'ID', '_score': #.##,
-                       'ensembl': { 'gene': 'ENSEMBLEID' },
-                       'symbol': 'GENESYMBOL' }
-        :rtype: list
-        """
-        res = self._genequery.querymany(genelist,
-                                                 species='human',
-                                                 scopes='_id',
-                                                 fields=['ensembl.gene', 'symbol'])
-        return res
-
     def _get_apms_bait_set(self):
         """
+        Gets unique set of baits
 
         :return:
+        :rtype: set
         """
         bait_set = set()
         for entry in self._apms_baitlist:
@@ -314,7 +387,7 @@ class APMSGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         :rtype: tuple
         """
         genelist, ambiguous_gene_dict = self._get_unique_genelist_from_edgelist()
-        query_res = self._getsymbolsforgenes(genelist=genelist)
+        query_res = self._genequery.get_symbols_for_genes(genelist=genelist)
         bait_set = self._get_apms_bait_set()
         errors = []
         gene_node_attrs = {}

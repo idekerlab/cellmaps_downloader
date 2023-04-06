@@ -11,7 +11,7 @@ import unittest
 from cellmaps_downloader import cellmaps_downloadercmd
 
 
-class TestCellmaps_downloader(unittest.TestCase):
+class TestCellmapsDownloader(unittest.TestCase):
     """Tests for `cellmaps_downloader` package."""
 
     def setUp(self):
@@ -27,18 +27,16 @@ class TestCellmaps_downloader(unittest.TestCase):
                                                       ['foo'])
 
         self.assertEqual(res.verbose, 0)
-        self.assertEqual(res.exitcode, 0)
         self.assertEqual(res.logconf, None)
 
         someargs = ['foo', '-vv', '--logconf',
-                    'hi', '--exitcode', '3']
+                    'hi']
         res = cellmaps_downloadercmd._parse_arguments('hi',
                                                       someargs)
 
         self.assertEqual(res.verbose, 2)
         self.assertEqual(res.outdir, 'foo')
         self.assertEqual(res.logconf, 'hi')
-        self.assertEqual(res.exitcode, 3)
 
     def test_setup_logging(self):
         """ Tests logging setup"""
