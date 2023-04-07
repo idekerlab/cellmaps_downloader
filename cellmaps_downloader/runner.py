@@ -303,7 +303,23 @@ class CellmapsdownloaderRunner(object):
                                           version=cellmaps_downloader.__version__,
                                           data=data)
 
-    def _download_images(self):
+    def _retry_failed_images(self, failed_downloads=None):
+        """
+
+        :param failed_downloads:
+        :return:
+        """
+        downloads_to_retry = []
+        error_code_map = {}
+        for entry in failed_downloads:
+            if entry[0] not in error_code_map:
+                error_code_map[entry[0]] = 0
+            error_code_map[entry[0]] += 1
+            downloads_to_retry.append(entry[2])
+        logger.debug('Failed download counts by http error code: ' + str(error_code_map))
+        return self._imagedownloader.download_images(downloads_to_retry)
+
+    def _download_images(self, max_retry=5):
         """
         Uses downloader specified in constructor to download images noted in
         tsvfile file also specified in constructor
@@ -318,13 +334,18 @@ class CellmapsdownloaderRunner(object):
         downloadtuples = self._get_download_tuples_from_tsv()
 
         failed_downloads = self._imagedownloader.download_images(downloadtuples)
+        retry_count = 0
+        while len(failed_downloads) > 0 and retry_count < max_retry:
+            retry_count += 1
+            logger.error(str(len(failed_downloads)) +
+                         ' images failed to download. Retrying #' + str(retry_count))
+
+            # try one more time with files that failed
+            failed_downloads = self._retry_failed_images(failed_downloads=failed_downloads)
 
         if len(failed_downloads) > 0:
-            logger.error(str(len(failed_downloads)) +
-                         ' images failed to download. Retrying')
-            # try one more time with files that failed
-            # todo need to implement a retry
-            raise CellMapsDownloaderError('Not implemented yet!!!')
+            raise CellMapsDownloaderError('Failed to download: ' +
+                                          str(len(failed_downloads)) + ' images')
         return 0
 
     def get_apms_gene_node_attributes_file(self):
