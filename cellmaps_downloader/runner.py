@@ -9,7 +9,7 @@ import logging.config
 import requests
 import time
 from tqdm import tqdm
-from cellmaps_utils import cellmaps_io
+from cellmaps_utils import logutils
 import cellmaps_downloader
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
 
@@ -298,10 +298,10 @@ class CellmapsdownloaderRunner(object):
                 'image_downloader': str(self._imagedownloader),
                 'image_suffix': self._imgsuffix}
 
-        cellmaps_io.write_task_start_json(outdir=self._outdir,
-                                          start_time=self._start_time,
-                                          version=cellmaps_downloader.__version__,
-                                          data=data)
+        logutils.write_task_start_json(outdir=self._outdir,
+                                       start_time=self._start_time,
+                                       version=cellmaps_downloader.__version__,
+                                       data=data)
 
     def _retry_failed_images(self, failed_downloads=None):
         """
@@ -487,8 +487,8 @@ class CellmapsdownloaderRunner(object):
 
             self._create_output_directory()
             if self._skip_logging is False:
-                cellmaps_io.setup_filelogger(outdir=self._outdir,
-                                             handlerprefix='cellmaps_downloader')
+                logutils.setup_filelogger(outdir=self._outdir,
+                                          handlerprefix='cellmaps_downloader')
                 self._write_task_start_json()
             self._copy_over_tsvfile()
 
@@ -518,7 +518,7 @@ class CellmapsdownloaderRunner(object):
             self._end_time = int(time.time())
             if self._skip_logging is False:
                 # write a task finish file
-                cellmaps_io.write_task_finish_json(outdir=self._outdir,
-                                                   start_time=self._start_time,
-                                                   end_time=self._end_time,
-                                                   status=exitcode)
+                logutils.write_task_finish_json(outdir=self._outdir,
+                                                start_time=self._start_time,
+                                                end_time=self._end_time,
+                                                status=exitcode)
