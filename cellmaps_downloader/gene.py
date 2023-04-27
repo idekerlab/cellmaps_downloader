@@ -128,12 +128,14 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
     """
 
     def __init__(self, antibody_list=None,
+                 samples_list=None,
                  genequery=GeneQuery()):
         """
         Constructor
         """
         super().__init__()
         self._antibody_list = antibody_list
+        self._samples_list = samples_list
         self._genequery = genequery
 
     def get_antibody_list(self):
@@ -162,6 +164,44 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                                    'locations': row['locations'],
                                    'n_location': row['n_location']})
         return antibodies
+
+    def get_samples_list(self):
+        """
+        Gets samples_list passed in via the constructor
+
+        :return:
+        """
+        return self._samples_list
+
+    @staticmethod
+    def get_samples_from_tsvfile(tsvfile=None):
+        """
+
+        :param tsvfile:
+        :return:
+        """
+        samples = []
+        with open(tsvfile, 'r') as f:
+            reader = csv.DictReader(f, delimiter='\t')
+            for row in reader:
+                samples.append({'gene_names': row['gene_names'],
+                                'file_link': row['file_link'],
+                                'file_name': row['file_name']})
+        return samples
+
+    def get_dict_of_gene_name_to_file_name(self):
+        """
+
+        :return:
+        """
+        g_name_dict = {}
+        for sample in self._samples_list:
+            gene_names = sample['gene_names'].split()
+            for g in gene_names:
+                if g in g_name_dict:
+                    logger.debug(g + ' already in dictionary')
+                g_name_dict[g] = sample['file_name']
+        return g_name_dict
 
     def _get_unique_genelist_from_antibodylist(self):
         """
