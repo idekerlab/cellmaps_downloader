@@ -31,20 +31,14 @@ def _parse_arguments(desc, args):
                                      formatter_class=constants.ArgParseFormatter)
     parser.add_argument('outdir',
                         help='Directory to write results to')
-    parser.add_argument('--tsv',
-                        help='TSV file with list of IF images to download '
-                             'in format of gene_names\tfile_link\tfile_name\n'
-                             'GOLGA5\thttps://images.proteinatlas.org/992/1_A1_1_\t1_A1_1_')
-    parser.add_argument('--samples',
-                        help='CSV file with information about samples in '
-                             'format of:\n'
-                             'filename,if_plate_id,position,sample,status,'
-                             'locations,'
-                             'antibody,ensembl_ids,gene_names\n'
-                             '/archive/1/1_A1_1_,1,A1,1,35,Golgi apparatus,'
-                             'HPA000992,ENSG00000066455,GOLGA5')
-    parser.add_argument('--antibodies',
-                        help='CSV file with information about antibodies '
+    parser.add_argument('--csv',
+                        help='CSV file with list of IF images to download '
+                             'in format of filename,if_plate_id,position,'
+                             'sample,status,locations,antibody,ensembl_ids,'
+                             'gene_names\n/archive/1/1_A1_1_,1,A1,1,35,'
+                             'Golgi apparatus,HPA000992,ENSG00000066455,GOLGA5')
+    parser.add_argument('--unique',
+                        help='CSV file of unique samples '
                              'in format of:\n'
                              'antibody,ensembl_ids,gene_names,atlas_name,'
                              'locations,n_location\n'
@@ -58,6 +52,8 @@ def _parse_arguments(desc, args):
                         help='APMS baitlist TSV file in format of:\n'
                              'GeneSymbol\tGeneID\t# Interactors\n'
                              '"ADA"\t"100"\t1.')
+    parser.add_argument('--image_url', default='https://images.proteinatlas.org',
+                        help='Base URL for downloading IF images')
     parser.add_argument('--poolsize', type=int,
                         default=4,
                         help='If using multiprocessing image downloader, '
@@ -109,16 +105,13 @@ def main(args):
     Downloads immunofluorescent labeled images from the Human Protein Atlas
     (https://www.proteinatlas.org/)
     
-    To use pass in a TSV file containing links to the images to download
-    from HPA
+    To use pass in a CSV file containing links to the images to download
+    from HPA via --csv flag
     
-    Format of TSV file:
+    Format of CSV file:
     
-    gene_names  file_link   file_name
-    XXXX    https://images.proteinatlas.org/###/1_A1_1_ 1_A1_1_
-    
-    Where XXXX is gene name and ### is a id number and 1_A1_1_ is an
-    example file name
+    filename,if_plate_id,position,sample,status,locations,antibody,ensembl_ids,gene_names
+    /archive/1/1_A1_1_,1,A1,1,35,Golgi apparatus,HPA000992,ENSG00000066455,GOLGA5
     
     The downloaded images are stored under the output directory
     specified on the command line in color specific directories
@@ -136,16 +129,21 @@ def main(args):
         logutils.setup_cmd_logging(theargs)
         apmsgen = APMSGeneNodeAttributeGenerator(apms_edgelist=APMSGeneNodeAttributeGenerator.get_apms_edgelist_from_tsvfile(theargs.apms_edgelist),
                                                  apms_baitlist=APMSGeneNodeAttributeGenerator.get_apms_baitlist_from_tsvfile(theargs.apms_baitlist))
-        imagegen = ImageGeneNodeAttributeGenerator(antibody_list=ImageGeneNodeAttributeGenerator.get_image_antibodies_from_csvfile(theargs.antibodies))
+        imagegen = ImageGeneNodeAttributeGenerator(unique_list=ImageGeneNodeAttributeGenerator.get_unique_list_from_csvfile(theargs.unique),
+                                                   samples_list=ImageGeneNodeAttributeGenerator.get_samples_from_csvfile(theargs.csv))
         dloader = MultiProcessImageDownloader(poolsize=theargs.poolsize,
                                               skip_existing=theargs.skip_existing)
         return CellmapsdownloaderRunner(outdir=theargs.outdir,
-                                        tsvfile=theargs.tsv,
                                         imagedownloader=dloader,
                                         imgsuffix=theargs.imgsuffix,
                                         apmsgen=apmsgen,
                                         imagegen=imagegen,
-                                        skip_logging=theargs.skip_logging).run()
+                                        image_url=theargs.image_url,
+                                        skip_logging=theargs.skip_logging,
+                                        misc_info_dict={'csv': theargs.csv,
+                                                        'unique': theargs.unique,
+                                                        'apms_edgelist': theargs.apms_edgelist,
+                                                        'apms_baitlist': theargs.apms_baitlist}).run()
     except Exception as e:
         logger.exception('Caught exception: ' + str(e))
         return 2

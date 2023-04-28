@@ -2,7 +2,7 @@
 
 import os
 from multiprocessing import Pool
-import csv
+import re
 import shutil
 import logging
 import logging.config
@@ -156,9 +156,15 @@ class CellmapsdownloaderRunner(object):
     List of colors
     """
 
-    TSVFILE = 'immunofluorescent.tsv'
+    SAMPLES_CSVFILE = 'samples.csv'
     """
-    Copy of input tsv file that is stored in output
+    Copy of input csv file that is stored in output
+    directory by the :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
+    """
+
+    UNIQUE_CSVFILE = 'unique.csv'
+    """
+    Copy of input csv file that is stored in output
     directory by the :py:meth:`~cellmaps_downloader.runner.CellmapsdownloaderRunner.run`
     """
 
@@ -169,19 +175,19 @@ class CellmapsdownloaderRunner(object):
     IMAGE_GENE_NODE_ATTR_FILE = 'image_gene_node_attributes.tsv'
     IMAGE_GENE_NODE_ERRORS_FILE = 'image_gene_node_attributes.errors'
 
-    def __init__(self, outdir=None, tsvfile=None,
+    def __init__(self, outdir=None,
                  imgsuffix='.jpg',
                  imagedownloader=MultiProcessImageDownloader(),
                  apmsgen=None,
                  imagegen=None,
-                 skip_logging=False):
+                 image_url=None,
+                 skip_logging=False,
+                 misc_info_dict=None):
         """
         Constructor
 
         :param outdir: directory where images will be downloaded to
         :type outdir: str
-        :param tsvfile: image TSV file
-        :type tsvfile: str
         :param imgsuffix: suffix to append to image file names
         :type imgsuffix: str
         :param imagedownloader: object that will perform image downloads
@@ -190,15 +196,18 @@ class CellmapsdownloaderRunner(object):
         :type apmsgen: :py:class:`~cellmaps_downloader.gene.APMSGeneNodeAttributeGenerator`
         :param imagegen: gene node attribute generator for IF image data
         :type imagegen: :py:class:`~cellmaps_downloader.gene.ImageGeneNodeAttributeGenerator`
+        :param image_url: Base URL for image download
+        :type image_url: str
         """
+        self._misc_info_dict = misc_info_dict
         self._outdir = outdir
-        self._tsvfile = tsvfile
         self._imagedownloader = imagedownloader
         self._imgsuffix = imgsuffix
         self._start_time = int(time.time())
         self._end_time = -1
         self._apmsgen = apmsgen
         self._imagegen = imagegen
+        self._image_url = image_url
         if skip_logging is None:
             self._skip_logging = False
         else:
@@ -222,26 +231,24 @@ class CellmapsdownloaderRunner(object):
             else:
                 logger.debug(cdir + ' already exists')
 
-    def _get_input_tsvfile(self):
+    def _get_input_samplesfile(self):
         """
-        Gets path to tsvfile that is copied into output directory specified via
+        Gets path to samples file that is copied into output directory specified via
         constructor
 
         :return: Path to file
         :rtype: str
         """
         return os.path.join(self._outdir,
-                            CellmapsdownloaderRunner.TSVFILE)
+                            CellmapsdownloaderRunner.SAMPLES_CSVFILE)
 
-    def _copy_over_tsvfile(self):
+    def _get_input_uniquefile(self):
         """
-        Copies tsv file into output directory for record keeping purposes
 
         :return:
         """
-        logger.debug('Copying ' + self._tsvfile + ' to ' +
-                     self._get_input_tsvfile())
-        shutil.copy(self._tsvfile, self._get_input_tsvfile())
+        return os.path.join(self._outdir,
+                            CellmapsdownloaderRunner.UNIQUE_CSVFILE)
 
     def _get_color_download_map(self):
         """
@@ -258,9 +265,18 @@ class CellmapsdownloaderRunner(object):
             color_d_map[c] = os.path.join(self._outdir, c)
         return color_d_map
 
-    def _get_download_tuples_from_tsv(self):
+    def _get_sample_url_and_filename(self, sample=None, color=None):
         """
-        Gets download list from TSV file for the 4 colors
+
+        :param sample:
+        :return:
+        """
+        file_name = sample['if_plate_id'] + '_' + sample['position'] + '_' + sample['sample'] + '_' + color + self._imgsuffix
+        return self._image_url + '/' + re.sub('^HPA0*|^CAB0*', '', sample['antibody']) + '/' + file_name, file_name
+
+    def _get_download_tuples_from_csv(self):
+        """
+        Gets download list from CSV file for the 4 colors
 
         :return: list of (image download URL prefix,
                           file path where image should be written)
@@ -270,17 +286,11 @@ class CellmapsdownloaderRunner(object):
 
         color_d_map = self._get_color_download_map()
 
-        with open(self._get_input_tsvfile(), 'r') as f:
-            reader = csv.reader(f, delimiter='\t')
-            is_first_row = True
-            for row in reader:
-                if is_first_row:
-                    is_first_row = False
-                    continue
-                for c in CellmapsdownloaderRunner.COLORS:
-                    dtuples.append((row[1] + c + self._imgsuffix,
-                                   os.path.join(color_d_map[c], row[2] +
-                                                c + self._imgsuffix)))
+        for row in self._imagegen.get_samples_list():
+            for c in CellmapsdownloaderRunner.COLORS:
+                image_url, file_name = self._get_sample_url_and_filename(sample=row, color=c)
+                dtuples.append((image_url,
+                                os.path.join(color_d_map[c], file_name)))
         return dtuples
 
     def _write_task_start_json(self):
@@ -289,14 +299,11 @@ class CellmapsdownloaderRunner(object):
         what is to be run
 
         """
-        if self._tsvfile is None:
-            tsvfile = 'Not set'
-        else:
-            tsvfile = os.path.abspath(self._tsvfile)
-
-        data = {'tsvfile': tsvfile,
-                'image_downloader': str(self._imagedownloader),
+        data = {'image_downloader': str(self._imagedownloader),
                 'image_suffix': self._imgsuffix}
+
+        if self._misc_info_dict is not None:
+            data.update(self._misc_info_dict)
 
         logutils.write_task_start_json(outdir=self._outdir,
                                        start_time=self._start_time,
@@ -331,7 +338,7 @@ class CellmapsdownloaderRunner(object):
         if self._imagedownloader is None:
             raise CellMapsDownloaderError('Image downloader is None')
 
-        downloadtuples = self._get_download_tuples_from_tsv()
+        downloadtuples = self._get_download_tuples_from_csv()
 
         failed_downloads = self._imagedownloader.download_images(downloadtuples)
         retry_count = 0
@@ -459,15 +466,13 @@ class CellmapsdownloaderRunner(object):
         :return:
         """
         with open(self.get_image_gene_node_attributes_file(), 'w') as f:
-            f.write('\t'.join(['name', 'represents', 'ambiguous', 'antibody',
-                               'filename']) +
+            f.write('\t'.join(['name', 'represents', 'ambiguous', 'antibody']) +
                     '\n')
             for key in gene_node_attrs:
                 f.write('\t'.join([gene_node_attrs[key]['name'],
                                    gene_node_attrs[key]['represents'],
                                    gene_node_attrs[key]['ambiguous'],
-                                   str(gene_node_attrs[key]['antibody']),
-                                   str(gene_node_attrs[key]['filename'])]))
+                                   str(gene_node_attrs[key]['antibody'])]))
                 f.write('\n')
         if errors is not None:
             with open(self.get_image_gene_node_errors_file(), 'w') as f:
@@ -490,7 +495,6 @@ class CellmapsdownloaderRunner(object):
                 logutils.setup_filelogger(outdir=self._outdir,
                                           handlerprefix='cellmaps_downloader')
                 self._write_task_start_json()
-            self._copy_over_tsvfile()
 
             # obtain apms data
             if self._apmsgen is not None:
@@ -505,6 +509,8 @@ class CellmapsdownloaderRunner(object):
 
             # write image attribute data
             if self._imagegen is not None:
+                self._imagegen.write_samples_as_csvfile(outfile=self._get_input_samplesfile())
+                self._imagegen.write_unique_list_as_csvfile(outfile=self._get_input_uniquefile())
                 image_gene_node_attrs, errors = self._imagegen.get_gene_node_attributes()
 
                 # write image attribute data

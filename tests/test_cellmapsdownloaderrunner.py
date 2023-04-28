@@ -192,8 +192,8 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
                         f_name_two + '\n')
 
             runner = CellmapsdownloaderRunner(outdir=temp_dir, tsvfile=tsvfile)
-            runner._copy_over_tsvfile()
-            dtuples = runner._get_download_tuples_from_tsv()
+            runner._copy_over_csvfile()
+            dtuples = runner._get_download_tuples_from_csv()
             self.assertTrue(8, len(dtuples))
             for c in CellmapsdownloaderRunner.COLORS:
                 for fname in [f_name_one, f_name_two]:
@@ -231,7 +231,7 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
                 self.assertTrue(os.path.isfile(imgfile))
                 with open(imgfile, 'r') as f:
                     self.assertEqual(c, f.read())
-            self.assertTrue(os.path.isfile(runner._get_input_tsvfile()))
+            self.assertTrue(os.path.isfile(runner._get_input_samplesfile()))
             start_json = None
             finish_json = None
             for entry in os.listdir(o_dir):
