@@ -8,11 +8,14 @@ import unittest
 import tempfile
 import shutil
 import requests_mock
+from unittest.mock import MagicMock
+from unittest.mock import Mock
 import json
 import cellmaps_downloader
 from cellmaps_downloader.exceptions import CellMapsDownloaderError
 from cellmaps_downloader.runner import CellmapsdownloaderRunner
 from cellmaps_downloader.runner import ImageDownloader
+from cellmaps_downloader.gene import ImageGeneNodeAttributeGenerator
 from cellmaps_downloader import runner
 
 
@@ -120,44 +123,19 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
     def test_create_output_directory(self):
         temp_dir = tempfile.mkdtemp()
         try:
-            runner = CellmapsdownloaderRunner(outdir=temp_dir)
-            runner._create_output_directory()
+            crunner = CellmapsdownloaderRunner(outdir=temp_dir)
+            crunner._create_output_directory()
             for c in CellmapsdownloaderRunner.COLORS:
                 self.assertTrue(os.path.isdir(os.path.join(temp_dir, c)))
-        finally:
-            shutil.rmtree(temp_dir)
-
-    def test_write_task_start_json_tsv_not_set(self):
-        temp_dir = tempfile.mkdtemp()
-        try:
-            runner = CellmapsdownloaderRunner(outdir=temp_dir)
-            runner._create_output_directory()
-            runner._write_task_start_json()
-            start_file = None
-            for entry in os.listdir(temp_dir):
-                if not entry.endswith('_start.json'):
-                    continue
-                start_file = os.path.join(temp_dir, entry)
-            self.assertIsNotNone(start_file)
-
-            with open(start_file, 'r') as f:
-                data = json.load(f)
-
-            self.assertEqual(cellmaps_downloader.__version__,
-                             data['version'])
-            self.assertEqual('Not set', data['tsvfile'])
-            self.assertTrue(data['start_time'] > 0)
-            self.assertEqual(temp_dir, data['outdir'])
-
         finally:
             shutil.rmtree(temp_dir)
 
     def test_write_task_start_json(self):
         temp_dir = tempfile.mkdtemp()
         try:
-            runner = CellmapsdownloaderRunner(outdir=temp_dir, tsvfile='/fake/my.tsv')
-            runner._create_output_directory()
-            runner._write_task_start_json()
+            crunner = CellmapsdownloaderRunner(outdir=temp_dir)
+            crunner._create_output_directory()
+            crunner._write_task_start_json()
             start_file = None
             for entry in os.listdir(temp_dir):
                 if not entry.endswith('_start.json'):
@@ -170,84 +148,41 @@ class TestCellmapsdownloaderrunner(unittest.TestCase):
 
             self.assertEqual(cellmaps_downloader.__version__,
                              data['version'])
-            self.assertEqual(os.path.abspath('/fake/my.tsv'),
-                             data['tsvfile'])
             self.assertTrue(data['start_time'] > 0)
             self.assertEqual(temp_dir, data['outdir'])
         finally:
             shutil.rmtree(temp_dir)
 
-    def test_get_download_tuples_from_tsv(self):
+    def test_get_download_tuples_from_csv(self):
         temp_dir = tempfile.mkdtemp()
         try:
-            link = 'https://x.y.z/359/'
-            f_name_one = '1_A1_1_'
-            f_name_two = '1_A1_2_'
-            tsvfile = os.path.join(temp_dir, 'foo.tsv')
-            with open(tsvfile, 'w') as f:
-                f.write('gene_names\tfile_link\tfile_name\n')
-                f.write('FOO1\t' + link + f_name_one + '\t' +
-                        f_name_one + '\n')
-                f.write('FOO2\t' + link + f_name_two + '\t' +
-                        f_name_two + '\n')
+            samples = [{'if_plate_id': '1',
+                        'position': 'A1',
+                        'sample': '1',
+                        'antibody': 'HPA000992'},
+                       {'if_plate_id': '2',
+                        'position': 'A3',
+                        'sample': '4',
+                        'antibody': 'HPA000992'}
+                       ]
 
-            runner = CellmapsdownloaderRunner(outdir=temp_dir, tsvfile=tsvfile)
-            runner._copy_over_csvfile()
-            dtuples = runner._get_download_tuples_from_csv()
-            self.assertTrue(8, len(dtuples))
+            imagegen = ImageGeneNodeAttributeGenerator(samples_list=samples)
+
+            link = 'http://foo'
+            suffix = '.jpg'
+            crunner = CellmapsdownloaderRunner(outdir=temp_dir,
+                                               image_url=link,
+                                               imgsuffix=suffix,
+                                               imagegen=imagegen)
+            dtuples = crunner._get_download_tuples_from_csv()
+
+            self.assertEqual(8, len(dtuples))
             for c in CellmapsdownloaderRunner.COLORS:
-                for fname in [f_name_one, f_name_two]:
-                    self.assertTrue((link + fname + c + '.jpg',
+                for fname in ['1_A1_1_', '2_A3_4_']:
+                    self.assertTrue((link + '/992/' + fname + c + suffix,
                                      os.path.join(temp_dir, c,
                                                   fname +
-                                                  c + '.jpg')) in dtuples)
-
-        finally:
-            shutil.rmtree(temp_dir)
-
-    def test_run_success(self):
-        temp_dir = tempfile.mkdtemp()
-        try:
-            link = 'https://x.y.z/359/'
-            f_name_one = '1_A1_1_'
-
-            tsvfile = os.path.join(temp_dir, 'foo.tsv')
-            with open(tsvfile, 'w') as f:
-                f.write('gene_names\tfile_link\tfile_name\n')
-                f.write('FOO1\t' + link + f_name_one + '\t' +
-                        f_name_one + '\n')
-            o_dir = os.path.join(temp_dir, 'outdir')
-
-            with requests_mock.mock() as m:
-                for c in CellmapsdownloaderRunner.COLORS:
-                    mockurl = link + f_name_one + c + '.jpg'
-                    m.get(mockurl, status_code=200,
-                          text=c)
-                runner = CellmapsdownloaderRunner(outdir=o_dir, tsvfile=tsvfile)
-                self.assertEqual(0, runner.run())
-
-            for c in CellmapsdownloaderRunner.COLORS:
-                imgfile = os.path.join(o_dir, c, '1_A1_1_' + c + '.jpg')
-                self.assertTrue(os.path.isfile(imgfile))
-                with open(imgfile, 'r') as f:
-                    self.assertEqual(c, f.read())
-            self.assertTrue(os.path.isfile(runner._get_input_samplesfile()))
-            start_json = None
-            finish_json = None
-            for entry in os.listdir(o_dir):
-                if entry.endswith('_start.json'):
-                    start_json = os.path.join(o_dir, entry)
-                elif entry.endswith('_finish.json'):
-                    finish_json = os.path.join(o_dir, entry)
-            self.assertTrue(os.path.isfile(start_json))
-            self.assertTrue(os.path.isfile(finish_json))
-
-            with open(start_json, 'r') as f:
-                data = json.load(f)
-                self.assertEqual(cellmaps_downloader.__version__, data['version'])
-            with open(finish_json, 'r') as f:
-                data = json.load(f)
-                self.assertEqual('0', data['status'])
+                                                  c + suffix)) in dtuples)
 
         finally:
             shutil.rmtree(temp_dir)

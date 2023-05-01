@@ -130,7 +130,7 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
 
     SAMPLES_HEADER_COLS = ['filename', 'if_plate_id',
                            'position', 'sample', 'status',
-                           'locations','antibody',
+                           'locations', 'antibody',
                            'ensembl_ids', 'gene_names']
 
     UNIQUE_HEADER_COLS = ['antibody', 'ensembl_ids',
@@ -163,10 +163,13 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         :param outfile:
         :return:
         """
-        with open(outfile, 'w') as f:
-            f.write(','.join(ImageGeneNodeAttributeGenerator.SAMPLES_HEADER_COLS) + '\n')
+        if self._samples_list is None:
+            raise CellMapsDownloaderError('samples list is None')
+        with open(outfile, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=ImageGeneNodeAttributeGenerator.SAMPLES_HEADER_COLS)
+            writer.writeheader()
             for sample in self._samples_list:
-                f.write(','.join([sample[key] for key in ImageGeneNodeAttributeGenerator.SAMPLES_HEADER_COLS]) + '\n')
+                writer.writerow(sample)
 
     @staticmethod
     def get_samples_from_csvfile(csvfile=None):
@@ -202,10 +205,14 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         :param outfile:
         :return:
         """
-        with open(outfile, 'w') as f:
-            f.write(','.join(ImageGeneNodeAttributeGenerator.UNIQUE_HEADER_COLS) + '\n')
+        if self._unique_list is None:
+            raise CellMapsDownloaderError('unique list is None')
+
+        with open(outfile, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=ImageGeneNodeAttributeGenerator.UNIQUE_HEADER_COLS)
+            writer.writeheader()
             for u in self._unique_list:
-                f.write(','.join([u[key] for key in ImageGeneNodeAttributeGenerator.UNIQUE_HEADER_COLS]) + '\n')
+                writer.writerow(u)
 
     @staticmethod
     def get_unique_list_from_csvfile(csvfile=None):
@@ -229,7 +236,27 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                                'n_location': row['n_location']})
         return u_list
 
-    def get_dict_of_gene_to_file_antibody(self):
+    def _get_set_of_antibodies_from_unique_list(self):
+        """
+        Extract a unique set of antibodies from antibodies list
+        passed in via constructor
+
+        :return:
+        :rtype: set
+        """
+        if self._unique_list is None:
+            raise CellMapsDownloaderError('unique list is None')
+
+        antibody_set = set()
+        for a in self._unique_list:
+            if 'antibody' not in a:
+                logger.warning('Skipping because antibody not found '
+                               'in unique entry: ' + str(a))
+                continue
+            antibody_set.add(a['antibody'])
+        return antibody_set
+
+    def get_dicts_of_gene_to_antibody_filename(self, allowed_antibodies=None):
         """
         Gets a dictionary where key is ensembl id and value is
         the file_name value
@@ -237,17 +264,25 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         :return:
         :rtype: dict
         """
-        g_name_dict = {}
+        g_antibody_dict = {}
+        g_filename_dict = {}
         for sample in self._samples_list:
+            if allowed_antibodies is not None and sample['antibody'] not in allowed_antibodies:
+                # skipping cause antibody is not in allowed set
+                continue
+
             ensembl_ids = sample['ensembl_ids'].split(',')
             for g in ensembl_ids:
-                if g not in g_name_dict:
-                    g_name_dict[g] = set()
-                g_name_dict[g].add(sample['antibody'] + ':' +
-                                   sample['if_plate_id'] + '_' +
-                                   sample['position'] + '_' +
-                                   sample['sample'] + '_')
-        return g_name_dict
+                if g not in g_antibody_dict:
+                    g_antibody_dict[g] = set()
+                if g not in g_filename_dict:
+                    g_filename_dict[g] = set()
+                g_antibody_dict[g].add(sample['antibody'])
+                g_filename_dict[g].add(sample['if_plate_id'] + '_' +
+                                       sample['position'] + '_' +
+                                       sample['sample'] + '_')
+
+        return g_antibody_dict, g_filename_dict
 
     def _get_unique_genelist_from_samplelist(self):
         """
@@ -278,7 +313,10 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         genelist, ambiguous_gene_dict = self._get_unique_genelist_from_samplelist()
         query_res = self._genequery.get_symbols_for_genes(genelist=genelist,
                                                           scopes='ensembl.gene')
-        g_to_file_antibody = self.get_dict_of_gene_to_file_antibody()
+
+        unique_antibodies = self._get_set_of_antibodies_from_unique_list()
+        g_antibody_dict, g_filename_dict = self.get_dicts_of_gene_to_antibody_filename(allowed_antibodies=unique_antibodies)
+
         errors = []
         gene_node_attrs = {}
         for x in query_res:
@@ -298,7 +336,7 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
 
             if len(x['ensembl']) > 1:
                 for g in x['ensembl']:
-                    if g['gene'] in g_to_file_antibody:
+                    if g['gene'] in g_antibody_dict:
                         ensembl_id = g['gene']
                         break
                 ensemblstr += ';'.join([g['gene'] for g in x['ensembl']])
@@ -306,9 +344,12 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
                 ensemblstr += x['ensembl']['gene']
                 ensembl_id = x['ensembl']['gene']
 
-            file_antibodies = g_to_file_antibody[ensembl_id]
-            antibody_str = ','.join([entry for entry in file_antibodies])
-
+            filename_str = ','.join(list(g_filename_dict[ensembl_id]))
+            antibody_str = ','.join(list(g_antibody_dict[ensembl_id]))
+            if ',' in filename_str or ' ' in filename_str:
+                filename_str = '"' + filename_str + '"'
+            if ',' in antibody_str or ' ' in antibody_str:
+                antibody_str = '"' + antibody_str + '"'
             ambiguous_str = ''
             if x['symbol'] in ambiguous_gene_dict:
                 ambiguous_str = ambiguous_gene_dict[x['symbol']]
@@ -316,7 +357,8 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
             gene_node_attrs[x['query']] = {'name': x['symbol'],
                                            'represents': ensemblstr,
                                            'ambiguous': ambiguous_str,
-                                           'antibody': antibody_str}
+                                           'antibody': antibody_str,
+                                           'filename': filename_str}
 
         return gene_node_attrs, errors
 

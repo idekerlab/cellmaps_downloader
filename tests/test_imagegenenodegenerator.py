@@ -29,6 +29,59 @@ class TestAPMSGeneNodeAttributeGenerator(unittest.TestCase):
         gen = ImageGeneNodeAttributeGenerator(unique_list='foo')
         self.assertEqual('foo', gen.get_unique_list())
 
+    def test_get_samples_from_csv_file(self):
+        try:
+            # Test case when csvfile is None
+            result = ImageGeneNodeAttributeGenerator.get_samples_from_csvfile()
+            self.fail('Expected exception')
+        except CellMapsDownloaderError as ce:
+            self.assertEqual('csvfile is None', str(ce))
+
+        # Test case when file is not found
+        with self.assertRaises(FileNotFoundError):
+            ImageGeneNodeAttributeGenerator.get_samples_from_csvfile('non_existent_file.csv')
+
+        # Test case when csvfile is empty
+        with patch('builtins.open', mock_open(read_data='')):
+            result = ImageGeneNodeAttributeGenerator.get_samples_from_csvfile('test.csv')
+            self.assertEqual(result, [])
+
+        # Test case when csvfile has data
+        csv_data = 'filename,if_plate_id,position,sample,' \
+                   'status,locations,antibody,ensembl_ids,' \
+                   'gene_names\n/archive/1/1_A1_1_,1,A1,1,35,' \
+                   'Golgi apparatus,HPA000992,ENSG00000066455,' \
+                   'GOLGA5\n/archive/1/1_A1_2_,1,A1,2,35,' \
+                   'Golgi apparatus,HPA000992,ENSG00000066455,' \
+                   'GOLGA5\n/archive/1/1_A3_1_,1,A3,1,35,' \
+                   'Cytosol,Nucleoplasm,HPA002899,' \
+                   'ENSG00000183092,BEGAIN\n'
+        with patch('builtins.open', mock_open(read_data=csv_data)):
+            result = ImageGeneNodeAttributeGenerator.get_samples_from_csvfile('test.csv')
+            expected_result = [{'filename': '/archive/1/1_A1_1_',
+                                'if_plate_id': '1', 'position': 'A1',
+                                'sample': '1', 'status': '35',
+                                'locations': 'Golgi apparatus',
+                                'antibody': 'HPA000992',
+                                'ensembl_ids': 'ENSG00000066455',
+                                'gene_names': 'GOLGA5'},
+                               {'filename': '/archive/1/1_A1_2_',
+                                'if_plate_id': '1', 'position': 'A1',
+                                'sample': '2', 'status': '35',
+                                'locations': 'Golgi apparatus',
+                                'antibody': 'HPA000992',
+                                'ensembl_ids': 'ENSG00000066455',
+                                'gene_names': 'GOLGA5'},
+                               {'filename': '/archive/1/1_A3_1_',
+                                'if_plate_id': '1', 'position': 'A3',
+                                'sample': '1', 'status': '35',
+                                'locations': 'Cytosol',
+                                'antibody': 'Nucleoplasm',
+                                'ensembl_ids': 'HPA002899',
+                                'gene_names': 'ENSG00000183092'}]
+
+            self.assertEqual(result, expected_result)
+
     def test_get_image_antibodies_from_csvfile(self):
         try:
             # Test case when csvfile is None
@@ -66,4 +119,106 @@ class TestAPMSGeneNodeAttributeGenerator(unittest.TestCase):
                                 'gene_names': 'DLG4', 'atlas_name': 'Brain',
                                 'locations': 'CA3', 'n_location': '3'}]
             self.assertEqual(result, expected_result)
+
+    def test_write_samples_as_csvfile(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # test write when samples is None
+            try:
+                imagegen = ImageGeneNodeAttributeGenerator()
+                imagegen.write_samples_as_csvfile(os.path.join(temp_dir, 'foo.csv'))
+                self.fail('Expected exception')
+            except CellMapsDownloaderError as ce:
+                self.assertEqual('samples list is None', str(ce))
+
+                # test with empty samples
+                imagegen = ImageGeneNodeAttributeGenerator(samples_list=[])
+                out_file = os.path.join(temp_dir, 'emptyfile.csv')
+                imagegen.write_samples_as_csvfile(outfile=os.path.join(temp_dir, out_file))
+
+                with open(out_file, 'r') as f:
+                    data = f.read()
+                    self.assertEqual(','.join(ImageGeneNodeAttributeGenerator.SAMPLES_HEADER_COLS) + '\n', data)
+
+                # test with a row
+                sample = {}
+                for key in ImageGeneNodeAttributeGenerator.SAMPLES_HEADER_COLS:
+                    sample[key] = key + '_' + str(len(key))
+
+                imagegen = ImageGeneNodeAttributeGenerator(samples_list=[sample])
+                one_line_file = os.path.join(temp_dir, 'oneline.csv')
+                imagegen.write_samples_as_csvfile(outfile=os.path.join(temp_dir, one_line_file))
+
+                with open(one_line_file, 'r') as f:
+                    data = f.readline()
+                    self.assertEqual(','.join(ImageGeneNodeAttributeGenerator.SAMPLES_HEADER_COLS) + '\n', data)
+                    data = f.readline()
+                    self.assertEqual('filename_8,if_plate_id_11,position_8,'
+                                     'sample_6,status_6,locations_9,'
+                                     'antibody_8,ensembl_ids_11,'
+                                     'gene_names_10\n', data)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_write_unique_list_as_csvfile(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # test write when samples is None
+            try:
+                imagegen = ImageGeneNodeAttributeGenerator()
+                imagegen.write_unique_list_as_csvfile(os.path.join(temp_dir, 'foo.csv'))
+                self.fail('Expected exception')
+            except CellMapsDownloaderError as ce:
+                self.assertEqual('unique list is None', str(ce))
+
+                # test with empty unique
+                imagegen = ImageGeneNodeAttributeGenerator(unique_list=[])
+                out_file = os.path.join(temp_dir, 'emptyfile.csv')
+                imagegen.write_unique_list_as_csvfile(outfile=os.path.join(temp_dir, out_file))
+
+                with open(out_file, 'r') as f:
+                    data = f.read()
+                    self.assertEqual(','.join(ImageGeneNodeAttributeGenerator.UNIQUE_HEADER_COLS) + '\n', data)
+
+                # test with a row
+                unique = {}
+                for key in ImageGeneNodeAttributeGenerator.UNIQUE_HEADER_COLS:
+                    unique[key] = key + '_' + str(len(key))
+
+                imagegen = ImageGeneNodeAttributeGenerator(unique_list=[unique])
+                one_line_file = os.path.join(temp_dir, 'oneline.csv')
+                imagegen.write_unique_list_as_csvfile(outfile=os.path.join(temp_dir, one_line_file))
+
+                with open(one_line_file, 'r') as f:
+                    data = f.readline()
+                    self.assertEqual(','.join(ImageGeneNodeAttributeGenerator.UNIQUE_HEADER_COLS) + '\n', data)
+                    data = f.readline()
+                    self.assertEqual('antibody_8,ensembl_ids_11,'
+                                     'gene_names_10,atlas_name_10,'
+                                     'locations_9,n_location_10\n', data)
+        finally:
+            shutil.rmtree(temp_dir)
+
+    def test_get_set_of_antibodies_from_unique_list(self):
+        # try with None for unique list
+        try:
+            imagegen = ImageGeneNodeAttributeGenerator()
+            imagegen._get_set_of_antibodies_from_unique_list()
+            self.fail('Expected Exception')
+        except CellMapsDownloaderError as ce:
+            self.assertEqual('unique list is None', str(ce))
+
+        # try with empty unique list
+        imagegen = ImageGeneNodeAttributeGenerator(unique_list=[])
+        self.assertEqual(0, len(imagegen._get_set_of_antibodies_from_unique_list()))
+
+        # try with two unique entries and one entry that is invalid
+        unique_list = [{'antibody': 'one'}, {'foo': 'invalid'},
+                       {'antibody': 'one'},
+                       {'antibody': 'two'}]
+        imagegen = ImageGeneNodeAttributeGenerator(unique_list=unique_list)
+        res = imagegen._get_set_of_antibodies_from_unique_list()
+        self.assertEqual(2, len(res))
+        self.assertTrue('one' in res)
+        self.assertTrue('two' in res)
 

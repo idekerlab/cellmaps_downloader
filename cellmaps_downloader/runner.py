@@ -285,7 +285,6 @@ class CellmapsdownloaderRunner(object):
         dtuples = []
 
         color_d_map = self._get_color_download_map()
-
         for row in self._imagegen.get_samples_list():
             for c in CellmapsdownloaderRunner.COLORS:
                 image_url, file_name = self._get_sample_url_and_filename(sample=row, color=c)
@@ -466,13 +465,14 @@ class CellmapsdownloaderRunner(object):
         :return:
         """
         with open(self.get_image_gene_node_attributes_file(), 'w') as f:
-            f.write('\t'.join(['name', 'represents', 'ambiguous', 'antibody']) +
+            f.write('\t'.join(['name', 'represents', 'ambiguous', 'antibody', 'filename']) +
                     '\n')
             for key in gene_node_attrs:
                 f.write('\t'.join([gene_node_attrs[key]['name'],
                                    gene_node_attrs[key]['represents'],
                                    gene_node_attrs[key]['ambiguous'],
-                                   str(gene_node_attrs[key]['antibody'])]))
+                                   str(gene_node_attrs[key]['antibody']),
+                                   str(gene_node_attrs[key]['filename'])]))
                 f.write('\n')
         if errors is not None:
             with open(self.get_image_gene_node_errors_file(), 'w') as f:
