@@ -222,3 +222,41 @@ class TestAPMSGeneNodeAttributeGenerator(unittest.TestCase):
         self.assertTrue('one' in res)
         self.assertTrue('two' in res)
 
+    def test_get_dicts_of_gene_to_antibody_filename(self):
+        imagegen = ImageGeneNodeAttributeGenerator()
+
+        # test where samples list is None
+        try:
+            imagegen.get_dicts_of_gene_to_antibody_filename()
+            self.fail('Expected exception')
+        except CellMapsDownloaderError as ce:
+            self.assertEqual('samples list is None', str(ce))
+
+        # test where samples list is empty
+        imagegen = ImageGeneNodeAttributeGenerator(samples_list=[])
+        antibody_dict, filename_dict = imagegen.get_dicts_of_gene_to_antibody_filename()
+        self.assertEqual({}, antibody_dict)
+        self.assertEqual({}, filename_dict)
+
+        # test two samples
+        samples = [{'ensembl_ids': 'ensemble_one',
+                    'antibody': 'antibody_one',
+                    'if_plate_id': '1',
+                    'position': 'A1',
+                    'sample': '2'},
+                   {'ensembl_ids': 'ensemble_two',
+                    'antibody': 'antibody_two',
+                    'if_plate_id': '3',
+                    'position': 'B1',
+                    'sample': '4'}]
+        imagegen = ImageGeneNodeAttributeGenerator(samples_list=samples)
+        antibody_dict, filename_dict = imagegen.get_dicts_of_gene_to_antibody_filename()
+        self.assertEqual({'ensemble_one': {'antibody_one'},
+                          'ensemble_two': {'antibody_two'}}, antibody_dict)
+        self.assertEqual({'ensemble_one': {'1_A1_2_'},
+                          'ensemble_two': {'3_B1_4_'}}, filename_dict)
+
+        # run again this time limit two antibody_two
+        antibody_dict, filename_dict = imagegen.get_dicts_of_gene_to_antibody_filename(allowed_antibodies={'antibody_two'})
+        self.assertEqual({'ensemble_two': {'antibody_two'}}, antibody_dict)
+        self.assertEqual({'ensemble_two': {'3_B1_4_'}}, filename_dict)
