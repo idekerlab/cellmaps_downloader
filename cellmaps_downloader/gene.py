@@ -264,8 +264,12 @@ class ImageGeneNodeAttributeGenerator(GeneNodeAttributeGenerator):
         :return:
         :rtype: dict
         """
+        if self._samples_list is None:
+            raise CellMapsDownloaderError('samples list is None')
+
         g_antibody_dict = {}
         g_filename_dict = {}
+
         for sample in self._samples_list:
             if allowed_antibodies is not None and sample['antibody'] not in allowed_antibodies:
                 # skipping cause antibody is not in allowed set
