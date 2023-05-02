@@ -3,7 +3,7 @@
 import os
 from multiprocessing import Pool
 import re
-import shutil
+import csv
 import logging
 import logging.config
 import requests
@@ -169,11 +169,15 @@ class CellmapsdownloaderRunner(object):
     """
 
     APMS_EDGELIST_FILE = 'apms_edgelist.tsv'
+    APMS_EDGELIST_COLS = ['geneA', 'geneB']
     APMS_GENE_NODE_ATTR_FILE = 'apms_gene_node_attributes.tsv'
     APMS_GENE_NODE_ERRORS_FILE = 'apms_gene_node_attributes.errors'
+    APMS_GENE_NODE_COLS = ['name', 'represents', 'ambiguous', 'bait']
 
     IMAGE_GENE_NODE_ATTR_FILE = 'image_gene_node_attributes.tsv'
     IMAGE_GENE_NODE_ERRORS_FILE = 'image_gene_node_attributes.errors'
+    IMAGE_GENE_NODE_COLS = ['name', 'represents', 'ambiguous',
+                            'antibody', 'filename']
 
     def __init__(self, outdir=None,
                  imgsuffix='.jpg',
@@ -384,15 +388,13 @@ class CellmapsdownloaderRunner(object):
         :param errors:
         :return:
         """
-        with open(self.get_apms_gene_node_attributes_file(), 'w') as f:
-            f.write('\t'.join(['name', 'represents', 'ambiguous', 'bait']) +
-                    '\n')
+        with open(self.get_apms_gene_node_attributes_file(), 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=CellmapsdownloaderRunner.APMS_GENE_NODE_COLS, delimiter='\t')
+
+            writer.writeheader()
             for key in gene_node_attrs:
-                f.write('\t'.join([gene_node_attrs[key]['name'],
-                                   gene_node_attrs[key]['represents'],
-                                   gene_node_attrs[key]['ambiguous'],
-                                   str(gene_node_attrs[key]['bait'])]))
-                f.write('\n')
+                writer.writerow(gene_node_attrs[key])
+
         if errors is not None:
             with open(self.get_apms_gene_node_errors_file(), 'w') as f:
                 for e in errors:
@@ -414,8 +416,9 @@ class CellmapsdownloaderRunner(object):
         :param gene_node_attrs:
         :return:
         """
-        with open(self.get_apms_edgelist_file(), 'w') as f:
-            f.write('geneA\tgeneB\n')
+        with open(self.get_apms_edgelist_file(), 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=CellmapsdownloaderRunner.APMS_EDGELIST_COLS, delimiter='\t')
+            writer.writeheader()
             for edge in edgelist:
                 if edge['GeneID1'] not in gene_node_attrs:
                     logger.error('Skipping ' + str(edge['GeneID1'] + ' cause it lacks a symbol'))
@@ -432,7 +435,8 @@ class CellmapsdownloaderRunner(object):
                 if len(genea) == 0 or len(geneb) == 0:
                     logger.error('Skipping edge cause no symbol is found: ' + str(edge))
                     continue
-                f.write(genea + '\t' + geneb + '\n')
+                writer.writerow({CellmapsdownloaderRunner.APMS_EDGELIST_COLS[0]: genea,
+                                 CellmapsdownloaderRunner.APMS_EDGELIST_COLS[1]: geneb})
 
     def get_image_gene_node_attributes_file(self):
         """
@@ -464,16 +468,11 @@ class CellmapsdownloaderRunner(object):
         :param errors:
         :return:
         """
-        with open(self.get_image_gene_node_attributes_file(), 'w') as f:
-            f.write('\t'.join(['name', 'represents', 'ambiguous', 'antibody', 'filename']) +
-                    '\n')
+        with open(self.get_image_gene_node_attributes_file(), 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=CellmapsdownloaderRunner.IMAGE_GENE_NODE_COLS, delimiter='\t')
+            writer.writeheader()
             for key in gene_node_attrs:
-                f.write('\t'.join([gene_node_attrs[key]['name'],
-                                   gene_node_attrs[key]['represents'],
-                                   gene_node_attrs[key]['ambiguous'],
-                                   str(gene_node_attrs[key]['antibody']),
-                                   str(gene_node_attrs[key]['filename'])]))
-                f.write('\n')
+                writer.writerow(gene_node_attrs[key])
         if errors is not None:
             with open(self.get_image_gene_node_errors_file(), 'w') as f:
                 for e in errors:
